@@ -131,8 +131,64 @@ Scripts called by agents must produce deterministic, parseable output on all cod
 - **Incremental saves**: For paid API operations, save results after each item to prevent data loss on crash.
 - **Batch discovery**: During self-annealing, look for batch endpoints that replace N+1 individual calls.
 
+## n8n-as-code Integration
+
+This project manages n8n workflows as version-controlled TypeScript files using the `n8n-as-code` plugin and `n8nac` CLI.
+
+### Initialization
+
+Before any workflow command, check if `n8nac-config.json` exists at the project root.
+
+- **If it exists:** the workspace is initialized. Proceed with workflow commands.
+- **If it's missing:** initialize using the credentials from `.env`:
+  ```bash
+  npx --yes n8nac init-auth --host <N8N_BASE_URL> --api-key <N8N_API_KEY> --sync-folder workflows
+  npx --yes n8nac init-project --project-index 1 --sync-folder workflows
+  npx --yes n8nac update-ai
+  ```
+  Ask the user for credentials if they're not in `.env`.
+
+### Workflow Sync Discipline
+
+This project uses a Git-like explicit sync model. **Always follow pull → edit → push.**
+
+1. **List workflows:** `npx --yes n8nac list` or `npx --yes n8nac find "search term"`
+2. **Pull before reading or editing:** `npx --yes n8nac pull <workflowId>`
+3. **Edit the `.workflow.ts` file** in `workflows/`
+4. **Push after editing:** `npx --yes n8nac push workflows/<filename>.workflow.ts`
+5. **Test webhook/chat workflows:** `npx --yes n8nac test <workflowId>`
+
+### Node Research Protocol
+
+Never guess n8n node parameters. Always verify against the schema:
+
+1. **Search:** `npx --yes n8nac skills search "node name"`
+2. **Get schema:** `npx --yes n8nac skills node-info "nodeName"`
+3. **Use the schema** as the source of truth when writing TypeScript
+
+### Key Commands
+
+| Command | Purpose |
+|---------|---------|
+| `npx --yes n8nac list` | List all workflows and sync status |
+| `npx --yes n8nac find "query"` | Find a workflow by name |
+| `npx --yes n8nac pull <id>` | Pull a single workflow from n8n |
+| `npx --yes n8nac push <path>` | Push a local workflow to n8n |
+| `npx --yes n8nac skills search "term"` | Search for node types |
+| `npx --yes n8nac skills node-info "name"` | Get full node schema |
+| `npx --yes n8nac workflow activate <id>` | Activate a workflow |
+| `npx --yes n8nac workflow deactivate <id>` | Deactivate a workflow |
+| `npx --yes n8nac test <id>` | Test a webhook/chat workflow |
+| `npx --yes n8nac credential list --json` | List existing credentials |
+
+### File Structure
+
+- `workflows/` — Synced `.workflow.ts` files (TypeScript decorator format)
+- `n8nac-config.json` — Instance config with API key (gitignored)
+- Workflow files use `@workflow`, `@node`, `@links` decorators from `@n8n-as-code/transformer`
+
 ## Summary
 
-You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
+You sit between human intent (directives) and deterministic execution (Python scripts and n8n workflows). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
 
 Be pragmatic. Be reliable. Self-anneal.

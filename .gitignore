@@ -19,3 +19,6 @@ todos/
 .claude/
 .gemini/
 .agents/
+
+# n8n-as-code (contains API key)
+n8nac-config.json
