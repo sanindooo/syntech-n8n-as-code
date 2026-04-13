@@ -1,3 +1,12 @@
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts
+node_id: e8a4c711-1d3f-4e72-b7a1-9c2b5e18a4d2
+node_name: "🎓 STAGE - 4B: Expert Content Processor"
+node_property: Stage4bExpertContentProcessor
+last_synced: 2026-04-13
+---
+
 # STAGE 4B: EXPERT THOUGHT LEADERSHIP PROCESSOR
 
 **Purpose**: Process expert LinkedIn content for the Expert vertical. Extract, summarise, and tag. No scoring or filtering required.
@@ -52,91 +61,6 @@ For each article or post:
     "First notable point from the content",
     "Second notable point if present",
     "Third notable point if present"
-  ]
-}
-```
-
----
-
-### EXAMPLES
-
-**Example 1: Research Paper**
-Post: "New paper out on methane emissions from fossil fuel infrastructure — measured 70% higher than officially reported. Implications are significant for net zero timelines. Link in comments."
-
-```json
-{
-  "pathway": "D",
-  "decision": "SURFACE",
-  "vertical": "Expert",
-  "content_type": "research_paper",
-  "topic_summary": "New research finds fossil fuel methane emissions are significantly underreported, with implications for net zero timelines",
-  "syntech_relevance": "Supports the urgency of transitioning away from fossil fuels — strengthens the case for waste-derived biodiesel as a drop-in alternative",
-  "key_highlights": [
-    "Methane emissions measured at 70% above officially reported levels",
-    "Findings challenge current net zero policy timelines",
-    "Increases regulatory and reputational pressure on fossil fuel operators"
-  ]
-}
-```
-
----
-
-**Example 2: Opinion Piece**
-Post: "We keep talking about net zero 2050 but the window is closing faster than policy reflects. Here's what the data actually shows and why governments need to move now."
-
-```json
-{
-  "pathway": "D",
-  "decision": "SURFACE",
-  "vertical": "Expert",
-  "content_type": "opinion_piece",
-  "topic_summary": "Expert argues net zero 2050 policy timelines are misaligned with the urgency indicated by current climate data",
-  "syntech_relevance": "Supports the broader narrative around accelerating decarbonisation — relevant to Syntech's educational content strategy and thought leadership positioning",
-  "key_highlights": [
-    "Policy timelines lagging behind climate science",
-    "Governments urged to accelerate decarbonisation commitments",
-    "Data-driven argument for immediate action rather than long-term targets"
-  ]
-}
-```
-
----
-
-**Example 3: Industry Announcement**
-Post: "Proud to share that the IPCC has released its latest synthesis report. Key finding: immediate and deep emissions reductions are necessary across all sectors, including transport and construction."
-
-```json
-{
-  "pathway": "D",
-  "decision": "SURFACE",
-  "vertical": "Expert",
-  "content_type": "industry_announcement",
-  "topic_summary": "IPCC synthesis report calls for immediate deep emissions reductions across all sectors including transport and construction",
-  "syntech_relevance": "Direct relevance to Syntech's target sectors (transport and construction) — regulatory and reputational pressure on these sectors increases biofuel demand",
-  "key_highlights": [
-    "IPCC calls for immediate action across transport and construction sectors",
-    "Synthesis report reinforces urgency of low-carbon fuel alternatives",
-    "Supports Syntech's positioning as a solution provider in high-pressure sectors"
-  ]
-}
-```
-
----
-
-**Example 4: Personal Update (Low Syntech Relevance)**
-Post: "Just wrapped up a fantastic workshop in Copenhagen on community resilience and climate adaptation funding. Energised by the conversations happening at the grassroots level."
-
-```json
-{
-  "pathway": "D",
-  "decision": "SURFACE",
-  "vertical": "Expert",
-  "content_type": "personal_update",
-  "topic_summary": "Expert shares experience from a climate adaptation and community resilience workshop in Copenhagen",
-  "syntech_relevance": null,
-  "key_highlights": [
-    "Focus on climate adaptation funding at community level",
-    "Grassroots activity in climate resilience space"
   ]
 }
 ```

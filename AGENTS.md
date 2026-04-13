@@ -187,6 +187,44 @@ Never guess n8n node parameters. Always verify against the schema:
 - `n8nac-config.json` — Instance config with API key (gitignored)
 - Workflow files use `@workflow`, `@node`, `@links` decorators from `@n8n-as-code/transformer`
 
+### Prompt Sync (Markdown is Canonical)
+
+Long-form LLM prompts embedded in Basic LLM Chain nodes live in `prompts/<workflow-slug>/` as markdown files. **Markdown is the source of truth for prompt content** — edit there, then embed into the workflow.
+
+Each prompt file has YAML frontmatter that maps it to a specific node:
+
+```yaml
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/.../News Sourcing Production (V2).workflow.ts
+node_id: cd2c63a0-3409-4916-bb32-4035814b22b3   # durable key, survives renames
+node_name: "⛽️ STAGE - 1: Fossil Fuel Filter"
+node_property: Stage1FossilFuelFilter
+last_synced: 2026-04-13
+---
+```
+
+Body structure: system message first, then `## USER MESSAGE` heading with a triple-backtick code block containing the user-message template.
+
+**Use `execution/sync_prompts.py` to keep them in sync:**
+
+| Command | Purpose | When to run |
+|---|---|---|
+| `python execution/sync_prompts.py check <workflow.ts>` | Read-only. Report drift between workflow-embedded prompts and markdown files (exits 1 if drift). | After `n8nac pull`; before `n8nac push` |
+| `python execution/sync_prompts.py pull <workflow.ts>` | Update existing tracked markdown files from the workflow. Reports "untracked" for LLM-chain nodes with no matching file. | After `n8nac pull` when the UI-side of a tracked prompt changed |
+| `python execution/sync_prompts.py pull <workflow.ts> --create-missing` | Also creates new markdown files for previously untracked nodes. | When you decide to start tracking a new node's prompt |
+
+**Editing flow for a tracked prompt:**
+
+1. `npx n8nac pull <id>` — pull latest workflow.
+2. `python execution/sync_prompts.py check <workflow.ts>` — detect any UI-side drift.
+   - If drift exists: run `pull` to accept UI edits, or edit the markdown to override.
+3. Edit the `.md` file (markdown is canonical).
+4. Re-embed into the `.ts` file — Claude/agent does this by hand for now (auto-push is intentionally not implemented to keep a human/agent review step on TypeScript-template-literal escaping).
+5. `npx n8nac push <path>` — deploy to n8n.
+
+**When you pull a new workflow for the first time:** run `check` first. If the workflow has LLM chain nodes you want to version-control prompts for, run `pull --create-missing` to scaffold markdown files, then reorganize and add any human-readable notes.
+
 ## Summary
 
 You sit between human intent (directives) and deterministic execution (Python scripts and n8n workflows). Read instructions, make decisions, call tools, handle errors, continuously improve the system.

@@ -1,3 +1,12 @@
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts
+node_id: cd2c63a0-3409-4916-bb32-4035814b22b3
+node_name: "⛽️ STAGE - 1: Fossil Fuel Filter"
+node_property: Stage1FossilFuelFilter
+last_synced: 2026-04-13
+---
+
 # STAGE 1: FOSSIL FUEL FILTER
 
 **Purpose**: Block irrelevant fossil fuel content. Bypass entirely for special source types.

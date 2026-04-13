@@ -1,3 +1,12 @@
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts
+node_id: 204327f7-0381-48cf-b4d5-64bb70c0cf50
+node_name: "🔑 STAGE - 2: VIP Keyword handler"
+node_property: Stage2VipKeywordHandler
+last_synced: 2026-04-13
+---
+
 # STAGE 2: VIP FAST-TRACK DETECTION
 
 **Purpose**: Identify articles substantially ABOUT Syntech's strategic VIP customers. Route expert and competitor LinkedIn content appropriately.

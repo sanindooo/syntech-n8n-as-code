@@ -1,3 +1,12 @@
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts
+node_id: b16581b0-9b74-4401-8db0-9ca3a3c88e7b
+node_name: "🪨 STAGE - 3: Topic Density Test"
+node_property: Stage3TopicDensityTest
+last_synced: 2026-04-13
+---
+
 # STAGE 3: CONTENT ROUTER
 
 **Purpose**: Classify article into appropriate evaluation pathway

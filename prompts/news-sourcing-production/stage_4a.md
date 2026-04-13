@@ -1,3 +1,12 @@
+---
+workflow_id: UzEv74M2D2q4z0Zx
+workflow_path: workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts
+node_id: 7a8e8544-04cc-40cf-8f76-39f5895e325c
+node_name: "📊 STAGE - 4A: Strategic Value Scorer"
+node_property: Stage4aStrategicValueScorer
+last_synced: 2026-04-13
+---
+
 # STAGE 4A: PATHWAY-AWARE STRATEGIC VALUE SCORER
 
 **Purpose**: Assess strategic value using Tim's decision-making framework, adapted per pathway
