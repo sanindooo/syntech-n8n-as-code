@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Pre-push hook: run sync_prompts.py check on every workflow file.
+#
+# Enable for your clone with:  git config core.hooksPath .githooks
+# Disable (one-off):          git push --no-verify
+#
+# Exits non-zero on drift between prompt markdown files and their workflow.
+
+set -e
+
+shopt -s nullglob globstar
+workflows=( workflows/**/*.workflow.ts )
+
+if [[ ${#workflows[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+fail=0
+for wf in "${workflows[@]}"; do
+    if ! python3 execution/sync_prompts.py check "$wf" > /tmp/sync_prompts_check.json 2>&1; then
+        status=$?
+        # exit 1 = drift; anything else = parse/error
+        if [[ $status -eq 1 ]]; then
+            echo "::error:: prompt drift detected in $wf" >&2
+            python3 -c "import json,sys; d=json.load(open('/tmp/sync_prompts_check.json')); [print(f'  {r[\"path\"]}: {r[\"status\"]}') for r in d.get('results',[]) if r['status']!='in_sync']" >&2
+        else
+            echo "::error:: sync_prompts.py failed for $wf (exit $status)" >&2
+            cat /tmp/sync_prompts_check.json >&2
+        fi
+        fail=1
+    fi
+done
+
+if [[ $fail -ne 0 ]]; then
+    echo "" >&2
+    echo "Fix options:" >&2
+    echo "  - Accept workflow changes:  python3 execution/sync_prompts.py pull <workflow.ts>" >&2
+    echo "  - Re-embed markdown:        edit workflow.ts manually (see AGENTS.md)" >&2
+    echo "  - Bypass (not recommended): git push --no-verify" >&2
+    exit 1
+fi

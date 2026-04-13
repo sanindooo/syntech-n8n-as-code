@@ -225,6 +225,16 @@ Body structure: system message first, then `## USER MESSAGE` heading with a trip
 
 **When you pull a new workflow for the first time:** run `check` first. If the workflow has LLM chain nodes you want to version-control prompts for, run `pull --create-missing` to scaffold markdown files, then reorganize and add any human-readable notes.
 
+**Tests:** `python3 -m unittest execution/test_sync_prompts.py` — runs in under a second, covers template-literal escaping, frontmatter round-trip, and brace-depth parsing edge cases.
+
+**Pre-push hook (recommended):** to have `check` run automatically before every push, enable the project's hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `.githooks/pre-push` hook runs `sync_prompts.py check` against every workflow file and blocks the push on drift. Bypass with `git push --no-verify` when you genuinely need to push a WIP.
+
 ## Summary
 
 You sit between human intent (directives) and deterministic execution (Python scripts and n8n workflows). Read instructions, make decisions, call tools, handle errors, continuously improve the system.

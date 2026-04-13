@@ -46,18 +46,79 @@ PROMPTS_ROOT = PROJECT_ROOT / "prompts"
 
 # --- Patterns ---------------------------------------------------------------
 
-# Match a single @node({...}) decorator block plus the property assignment
-# that immediately follows it. We only pluck out the fields we need.
-NODE_BLOCK_RE = re.compile(
-    r"@node\(\{(?P<decorator>.*?)\}\)\s*"
-    r"(?P<property>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?P<body>.*?)\n    \};",
-    re.DOTALL,
-)
+# Cursor patterns: anchors for the brace-depth walker below.
+NODE_DECORATOR_RE = re.compile(r"@node\(\s*\{")
+PROPERTY_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{")
 
 # Inside a decorator block: id, name, type
 ID_RE = re.compile(r"id:\s*'([^']+)'")
 NAME_RE = re.compile(r"name:\s*'((?:[^'\\]|\\.)*)'")
 TYPE_RE = re.compile(r"type:\s*'([^']+)'")
+
+
+def find_matching_brace(text: str, open_idx: int) -> int:
+    """Given text[open_idx] == '{', return the index of the matching '}'.
+
+    Tracks brace depth while skipping over single- and double-quoted strings,
+    template literals (including ${...} expression holes), line comments
+    (//), and block comments (/* */). Returns -1 if no match.
+    """
+    if open_idx >= len(text) or text[open_idx] != "{":
+        return -1
+    depth = 0
+    i = open_idx
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "{":
+            depth += 1
+            i += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+            i += 1
+        elif c in ("'", '"'):
+            quote = c
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    i += 1
+                    break
+                i += 1
+        elif c == "`":
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "`":
+                    i += 1
+                    break
+                # ${...} — recurse on nested braces
+                if text[i] == "$" and i + 1 < n and text[i + 1] == "{":
+                    end = find_matching_brace(text, i + 1)
+                    if end < 0:
+                        return -1
+                    i = end + 1
+                    continue
+                i += 1
+        elif c == "/" and i + 1 < n and text[i + 1] == "/":
+            while i < n and text[i] != "\n":
+                i += 1
+        elif c == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n:
+                if text[i] == "*" and text[i + 1] == "/":
+                    i += 2
+                    break
+                i += 1
+        else:
+            i += 1
+    return -1
 
 CHAIN_LLM_TYPE = "@n8n/n8n-nodes-langchain.chainLlm"
 
@@ -90,28 +151,24 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return fm, body
 
 
+FRONTMATTER_KEYS = (
+    "workflow_id",
+    "workflow_path",
+    "node_id",
+    "node_name",
+    "node_property",
+    "last_synced",
+)
+
+
 def render_frontmatter(fm: dict) -> str:
-    """Render frontmatter dict back into YAML-ish header."""
+    """Render frontmatter dict back into YAML-ish header with stable ordering."""
     lines = ["---"]
-    # Stable key ordering for diffability
-    for key in (
-        "workflow_id",
-        "workflow_path",
-        "node_id",
-        "node_name",
-        "node_property",
-        "last_synced",
-    ):
-        if key in fm:
-            value = fm[key]
-            # Quote values containing colons or unicode (emoji)
-            if ":" in value or any(ord(c) > 127 for c in value):
-                value = f'"{value}"'
-            lines.append(f"{key}: {value}")
-    # Any extra keys we don't know about, preserve at end
-    for key, value in fm.items():
-        if key in {"workflow_id", "workflow_path", "node_id", "node_name", "node_property", "last_synced"}:
+    for key in FRONTMATTER_KEYS:
+        if key not in fm:
             continue
+        value = fm[key]
+        # Quote values containing colons or unicode (emoji)
         if ":" in value or any(ord(c) > 127 for c in value):
             value = f'"{value}"'
         lines.append(f"{key}: {value}")
@@ -175,21 +232,30 @@ EMOJI_RE = re.compile(
 )
 
 
-def slugify(name: str) -> str:
-    """Lowercase, strip emojis/punctuation, collapse to underscores."""
+def slugify(name: str, sep: str = "_") -> str:
+    """Lowercase, strip emojis/punctuation, collapse to sep."""
     s = EMOJI_RE.sub("", name)
     s = s.lower()
-    s = re.sub(r"[^a-z0-9]+", "_", s)
-    s = s.strip("_")
+    s = re.sub(r"[^a-z0-9]+", sep, s)
+    s = s.strip(sep)
     return s or "node"
 
 
+VERSION_SUFFIX_RE = re.compile(r"[\s_-]*[\(\[]?\s*v\d+\s*[\)\]]?\s*$", re.IGNORECASE)
+
+
 def workflow_slug(workflow_path: Path) -> str:
-    """Derive a slug for the prompts subfolder from the workflow filename."""
-    stem = workflow_path.stem  # 'News Sourcing Production (V2).workflow'
+    """Derive a hyphenated slug for the prompts subfolder.
+
+    Strips the `.workflow` suffix and any trailing version marker such as
+    ` (V2)`, `_v3`, `-v10` so the slug matches what humans would pick
+    (e.g. `News Sourcing Production (V2).workflow.ts` → `news-sourcing-production`).
+    """
+    stem = workflow_path.stem
     if stem.endswith(".workflow"):
         stem = stem[: -len(".workflow")]
-    return slugify(stem)
+    stem = VERSION_SUFFIX_RE.sub("", stem)
+    return slugify(stem, sep="-")
 
 
 # --- Workflow parsing -------------------------------------------------------
@@ -207,12 +273,47 @@ class WorkflowNode:
 
 
 def parse_workflow(workflow_text: str) -> list[WorkflowNode]:
-    """Find every chainLlm node and pull out its system + user messages."""
+    """Find every @node declaration + following property assignment and
+    extract system/user messages for Basic LLM Chain nodes.
+
+    Uses brace-depth walking (find_matching_brace) rather than regex to
+    handle empty bodies (`= {};`), bodies containing `};` inside template
+    literals, and all other valid TypeScript shapes we've seen in practice.
+
+    Sentinel: asserts extracted decorator count matches the number of
+    @node( occurrences in the source. Mismatch raises ParseMismatchError.
+    """
+    declared = workflow_text.count("@node(")
     nodes: list[WorkflowNode] = []
-    for match in NODE_BLOCK_RE.finditer(workflow_text):
-        decorator = match.group("decorator")
-        prop = match.group("property")
-        body = match.group("body")
+    extracted = 0
+    cursor = 0
+    while True:
+        m = NODE_DECORATOR_RE.search(workflow_text, cursor)
+        if not m:
+            break
+        dec_open = m.end() - 1  # position of '{' in `@node({`
+        dec_close = find_matching_brace(workflow_text, dec_open)
+        if dec_close < 0:
+            break
+        decorator = workflow_text[dec_open + 1 : dec_close]
+        extracted += 1
+
+        # The property assignment should immediately follow `}) `
+        # Seek past the `)` and any whitespace to find `<Name> = {`
+        after_paren = workflow_text.find(")", dec_close) + 1
+        prop_match = PROPERTY_ASSIGN_RE.match(workflow_text, after_paren + skip_ws(workflow_text, after_paren))
+        if not prop_match:
+            cursor = dec_close + 1
+            continue
+        body_open = prop_match.end() - 1  # position of '{'
+        body_close = find_matching_brace(workflow_text, body_open)
+        if body_close < 0:
+            cursor = dec_close + 1
+            continue
+        body = workflow_text[body_open + 1 : body_close]
+        prop_name = prop_match.group(1)
+        cursor = body_close + 1
+
         type_match = TYPE_RE.search(decorator)
         if not type_match or type_match.group(1) != CHAIN_LLM_TYPE:
             continue
@@ -220,21 +321,45 @@ def parse_workflow(workflow_text: str) -> list[WorkflowNode]:
         name_match = NAME_RE.search(decorator)
         if not id_match or not name_match:
             continue
-        # Extract `text:` (user message) and `message:` (system message inside messageValues)
         text_extract = extract_template_literal(body, "text")
         message_extract = extract_template_literal(body, "message")
         nodes.append(
             WorkflowNode(
                 node_id=id_match.group(1),
                 node_name=name_match.group(1),
-                node_property=prop,
+                node_property=prop_name,
                 system_message=message_extract[0] if message_extract else None,
                 user_message=text_extract[0] if text_extract else None,
-                body_start=match.start("body"),
-                body_end=match.end("body"),
+                body_start=body_open + 1,
+                body_end=body_close,
             )
         )
+
+    if extracted != declared:
+        raise ParseMismatchError(declared=declared, extracted=extracted)
     return nodes
+
+
+def skip_ws(text: str, start: int) -> int:
+    """Return the count of whitespace characters starting at `start`."""
+    i = start
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    return i - start
+
+
+class ParseMismatchError(Exception):
+    """Raised when NODE_BLOCK_RE extracted a different count than exists in
+    the source. Indicates a regex misparse — the caller should report this
+    with error_code=parse_mismatch so humans notice."""
+
+    def __init__(self, declared: int, extracted: int) -> None:
+        self.declared = declared
+        self.extracted = extracted
+        super().__init__(
+            f"parse_workflow extracted {extracted} nodes but source declares "
+            f"{declared} @node(...) blocks — NODE_BLOCK_RE likely misparsed."
+        )
 
 
 # --- Markdown <-> prompt conversion -----------------------------------------
@@ -260,11 +385,6 @@ def split_md_body(body: str) -> tuple[str, Optional[str]]:
     # Trim any trailing '---' separator (used visually before USER MESSAGE)
     system_part = re.sub(r"\n+---\s*$", "", system_part)
     return system_part.strip(), user_text
-
-
-def md_to_prompt(md_body: str) -> tuple[str, Optional[str]]:
-    """Adapter — same as split_md_body, named for clarity at call sites."""
-    return split_md_body(md_body)
 
 
 def assemble_md_body(system_message: str, user_message: Optional[str]) -> str:
@@ -323,19 +443,30 @@ def cmd_pull(workflow_path: Path, create_missing: bool = False) -> dict:
             out_dir = PROMPTS_ROOT / workflow_slug(workflow_path)
             out_dir.mkdir(parents=True, exist_ok=True)
             target = out_dir / f"{slugify(node.node_property)}.md"
-        fm = {
+        # last_synced should reflect when the prompt content last changed,
+        # not when the script was last run. Reuse the existing timestamp if
+        # the content is unchanged; only advance it when we write.
+        existing_fm: dict = {}
+        if target.exists():
+            existing_fm, _ = parse_frontmatter(target.read_text(encoding="utf-8"))
+        body = assemble_md_body(node.system_message or "", node.user_message)
+        base_fm = {
             "workflow_id": workflow_id or "",
             "workflow_path": rel_workflow,
             "node_id": node.node_id,
             "node_name": node.node_name,
             "node_property": node.node_property,
-            "last_synced": today,
         }
-        body = assemble_md_body(node.system_message or "", node.user_message)
-        new_text = render_frontmatter(fm) + "\n" + body
+        # Build candidate with the existing timestamp (if any) to compare content
+        candidate_fm = {**base_fm, "last_synced": existing_fm.get("last_synced", today)}
+        candidate_text = render_frontmatter(candidate_fm) + "\n" + body
         was_new = not target.exists()
-        unchanged = (not was_new) and target.read_text(encoding="utf-8") == new_text
-        if not unchanged:
+        unchanged = (not was_new) and target.read_text(encoding="utf-8") == candidate_text
+        if unchanged:
+            new_text = candidate_text
+        else:
+            # Content changed (or new file) — stamp with today's date
+            new_text = render_frontmatter({**base_fm, "last_synced": today}) + "\n" + body
             target.write_text(new_text, encoding="utf-8")
         results.append(
             {
@@ -380,7 +511,7 @@ def cmd_check(workflow_path: Path) -> dict:
             )
             drift_count += 1
             continue
-        md_system, md_user = md_to_prompt(body)
+        md_system, md_user = split_md_body(body)
         ts_system = (node.system_message or "").rstrip()
         ts_user = node.user_message
         sys_diff = _unified(ts_system, md_system.rstrip(), f"{md_file.name} (workflow)", f"{md_file.name} (markdown)")
@@ -470,11 +601,23 @@ def main(argv: list[str]) -> None:
     except ValueError:
         _emit({"status": "error", "error_code": "outside_project_root", "message": str(workflow_path)}, 1)
 
-    if args.cmd == "pull":
-        _emit(cmd_pull(workflow_path, create_missing=args.create_missing))
-    if args.cmd == "check":
-        result = cmd_check(workflow_path)
-        _emit(result, 1 if result["drift_count"] > 0 else 0)
+    try:
+        if args.cmd == "pull":
+            _emit(cmd_pull(workflow_path, create_missing=args.create_missing))
+        if args.cmd == "check":
+            result = cmd_check(workflow_path)
+            _emit(result, 1 if result["drift_count"] > 0 else 0)
+    except ParseMismatchError as e:
+        _emit(
+            {
+                "status": "error",
+                "error_code": "parse_mismatch",
+                "message": str(e),
+                "declared": e.declared,
+                "extracted": e.extracted,
+            },
+            1,
+        )
 
 
 if __name__ == "__main__":

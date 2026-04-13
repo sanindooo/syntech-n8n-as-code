@@ -25,3 +25,7 @@ n8nac-config.json
 
 # Node dependencies (only used locally for type-checking workflow files)
 node_modules/
+
+# Python bytecode
+__pycache__/
+*.pyc
