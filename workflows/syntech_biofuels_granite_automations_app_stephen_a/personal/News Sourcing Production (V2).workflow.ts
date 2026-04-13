@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : News Sourcing Production (V2)
-// Nodes   : 143  |  Connections: 136
+// Nodes   : 150  |  Connections: 140
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -95,12 +95,11 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // AddContentWithoutDate1             httpRequest                [onError→out(1)] [creds]
 // SendAMessage5                      slack                      [creds]
 // SendAMessage6                      slack                      [creds]
-// Sonnet45T06                        lmChatAnthropic            [creds]
-// AnthropicChatModel6                lmChatAnthropic            [creds]
-// AnthropicChatModel7                lmChatAnthropic            [creds]
-// AnthropicChatModel8                lmChatAnthropic            [creds]
+// Sonnet45T06                        lmChatAnthropic            [creds] [ai_languageModel]
+// AnthropicChatModel6                lmChatAnthropic            [creds] [ai_languageModel]
+// AnthropicChatModel7                lmChatAnthropic            [creds] [ai_languageModel]
+// AnthropicChatModel8                lmChatAnthropic            [creds] [ai_languageModel]
 // KeepBiofuelContent1                filter
-// KeepKeywordDenseContent1           filter
 // StickyNote13                       stickyNote
 // StickyNote14                       stickyNote
 // StickyNote15                       stickyNote
@@ -110,10 +109,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // StructuredOutputParser24           outputParserStructured     [ai_outputParser]
 // StructuredOutputParser25           outputParserStructured
 // StructuredOutputParser26           outputParserStructured     [ai_outputParser]
+// StructuredOutputParser27           outputParserStructured     [AI] [ai_outputParser]
 // CallSearchGoogleSyntech            executeWorkflow            [onError→regular]
 // Merge2                             merge
+// MergeStage4                        merge
 // PerformFinalCalculation            code
 // Limit16Items                       limit
+// PathwayRouter                      switch
 // ViewDensityResults                 set                        [alwaysOutput]
 // ViewVipResults                     set                        [onError→regular] [alwaysOutput]
 // AnthropicChatModel2                lmChatAnthropic            [creds] [ai_languageModel]
@@ -131,7 +133,8 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // StickyNote                         stickyNote
 // AnthropicChatModel                 lmChatAnthropic            [creds] [ai_languageModel]
 // Stage4ClassificationAgentClaudeOptimisation1 chainLlm                   [retry]
-// Stage4ClassificationAgentClaudeOptimisation chainLlm                   [AI]
+// Stage4aStrategicValueScorer        chainLlm                   [AI]
+// Stage4bExpertContentProcessor      chainLlm                   [AI]
 // Aggregate                          aggregate
 // SemanticKeywordDeduplication       httpRequest                [retry]
 // StickyNote1                        stickyNote
@@ -146,10 +149,14 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // ImageAndPlatformPrompts            merge
 // DefaultArticleOutputs              aggregate
 // StickyNote2                        stickyNote
-// OpenaiChatModel1                   lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel                    lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel2                   lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel3                   lmChatOpenAi               [creds] [ai_languageModel]
+// OpenaiChatModel1                   lmChatOpenAi               [creds]
+// OpenaiChatModel                    lmChatOpenAi               [creds]
+// OpenaiChatModel2                   lmChatOpenAi               [creds]
+// OpenaiChatModel3                   lmChatOpenAi               [creds]
+// AnthropicChatModel1                lmChatAnthropic            [creds] [ai_languageModel]
+// OpenaiChatModel4                   lmChatOpenAi               [creds]
+// NoOperationDoNothing1              noOp
+// Sonnet45T0                         lmChatAnthropic            [creds] [ai_languageModel]
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -233,20 +240,24 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                                          → IfVipArticle
 //                                            → ViewVipResults
 //                                              → Merge2.in(1)
-//                                                → Stage4ClassificationAgentClaudeOptimisation
-//                                                  → PerformFinalCalculation
-//                                                    → ThresholdMet
-//                                                      → Sort
-//                                                        → Get100BestArticles
-//                                                          → Evaluation
-//                                                            → SetOutputInEvaluationGoogleSheet
-//                                                              → Evaluation1
-//                                                           .out(1) → SelectFields (↩ loop)
-//                                                     .out(1) → SelectFields1
+//                                                → Stage4aStrategicValueScorer
+//                                                  → MergeStage4
+//                                                    → PerformFinalCalculation
+//                                                      → ThresholdMet
+//                                                        → Sort
+//                                                          → Get100BestArticles
+//                                                            → Evaluation
+//                                                              → SetOutputInEvaluationGoogleSheet
+//                                                                → Evaluation1
+//                                                             .out(1) → SelectFields (↩ loop)
+//                                                       .out(1) → SelectFields1
 //                                           .out(1) → Stage3TopicDensityTest
 //                                              → ViewDensityResults
-//                                                → KeepKeywordDenseContent1
-//                                                  → Merge2 (↩ loop)
+//                                                → PathwayRouter
+//                                                  → NoOperationDoNothing1
+//                                                 .out(1) → Stage4bExpertContentProcessor
+//                                                    → MergeStage4.in(1) (↩ loop)
+//                                                 .out(2) → Merge2 (↩ loop)
 //                        → RemoveDuplicates (↩ loop)
 //                → NoRssUrlAvailable
 //                  → CallRssWebsiteSearchNoRssUrl
@@ -301,11 +312,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // CreateSummaryAndTitle10.uses({ ai_languageModel: OpenaiChatModel15, ai_outputParser: StructuredOutputParser21 })
 // CreateSummaryAndTitle11.uses({ ai_languageModel: OpenaiChatModel16, ai_outputParser: StructuredOutputParser22 })
 // StructuredOutputParser2.uses({ ai_languageModel: AnthropicChatModel })
+// StructuredOutputParser27.uses({ ai_languageModel: AnthropicChatModel1 })
 // StructuredOutputParser.uses({ ai_languageModel: AnthropicChatModel2 })
-// Stage1FossilFuelFilter.uses({ ai_languageModel: OpenaiChatModel1, ai_outputParser: StructuredOutputParser24 })
-// Stage2VipKeywordHandler.uses({ ai_languageModel: OpenaiChatModel, ai_outputParser: StructuredOutputParser })
-// Stage3TopicDensityTest.uses({ ai_languageModel: OpenaiChatModel2, ai_outputParser: StructuredOutputParser26 })
-// Stage4ClassificationAgentClaudeOptimisation.uses({ ai_languageModel: OpenaiChatModel3, ai_outputParser: StructuredOutputParser2 })
+// Stage1FossilFuelFilter.uses({ ai_languageModel: AnthropicChatModel6, ai_outputParser: StructuredOutputParser24 })
+// Stage2VipKeywordHandler.uses({ ai_languageModel: AnthropicChatModel7, ai_outputParser: StructuredOutputParser })
+// Stage3TopicDensityTest.uses({ ai_languageModel: AnthropicChatModel8, ai_outputParser: StructuredOutputParser26 })
+// Stage4aStrategicValueScorer.uses({ ai_languageModel: Sonnet45T06, ai_outputParser: StructuredOutputParser2 })
+// Stage4bExpertContentProcessor.uses({ ai_languageModel: Sonnet45T0, ai_outputParser: StructuredOutputParser27 })
 // </workflow-map>
 
 // =====================================================================
@@ -1718,7 +1731,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
     Evaluation1 = {
         operation: 'setMetrics',
         expectedAnswer: "={{ $('Run Evaluation').item.json.Expected_Score }}",
-        actualAnswer: "={{ $('STAGE - 4: Classification Agent (Claude Optimisation)').item.json.output.final_score }}",
+        actualAnswer: "={{ $('📊 STAGE - 4A: Strategic Value Scorer').item.json.output.final_score }}",
         prompt: `=You are an expert evaluator assessing how closely an actual score matches the expected score.
 
 Compare the expected and actual scores numerically, then assign a final similarity rating from 0 to 5 according to the following scale:
@@ -1859,8 +1872,8 @@ Do not include any reasoning, explanation, or additional text.
         onError: 'continueRegularOutput',
     })
     ScrapeAUrlAndGetItsContent3 = {
+        resource: 'Scraping',
         operation: 'scrape',
-        requestOptions: {},
     };
 
     @node({
@@ -5635,7 +5648,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Sonnet 4.5 T0.6',
         type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
         version: 1.3,
-        position: [6848, 5552],
+        position: [6816, 5536],
         credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
     })
     Sonnet45T06 = {
@@ -5743,37 +5756,6 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
     };
 
     @node({
-        id: 'b39c72c9-f4b8-4b36-afaf-ed8bf60c1a64',
-        name: 'Keep Keyword Dense Content1',
-        type: 'n8n-nodes-base.filter',
-        version: 2.2,
-        position: [6432, 5136],
-    })
-    KeepKeywordDenseContent1 = {
-        conditions: {
-            options: {
-                caseSensitive: true,
-                leftValue: '',
-                typeValidation: 'strict',
-                version: 2,
-            },
-            conditions: [
-                {
-                    id: '824b966d-9483-4bd7-8a81-93306360add6',
-                    leftValue: "={{ $('🪨 STAGE - 3: Topic Density Test').item.json.output.pathway }}",
-                    rightValue: 'REJECT',
-                    operator: {
-                        type: 'string',
-                        operation: 'notEquals',
-                    },
-                },
-            ],
-            combinator: 'and',
-        },
-        options: {},
-    };
-
-    @node({
         id: 'a1f994da-e8c0-4aff-baf7-e7fa0ed104d9',
         name: 'Sticky Note13',
         type: 'n8n-nodes-base.stickyNote',
@@ -5866,7 +5848,7 @@ OUTPUT: decision (PASS/REJECT), density_score (%), keywords_found, downstream_ef
         name: 'Sticky Note16',
         type: 'n8n-nodes-base.stickyNote',
         version: 1,
-        position: [6832, 4656],
+        position: [6800, 4304],
     })
     StickyNote16 = {
         content: `## Stage 4
@@ -5896,7 +5878,7 @@ ADJUSTMENTS:
 
 OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdown, 
         strategic_summary, key_highlights, recommended_action`,
-        height: 1248,
+        height: 1600,
         width: 864,
     };
 
@@ -6060,6 +6042,30 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
   "reasoning": "UCO feedstock pricing headline indicates actionable market intelligence",
   "keywords_detected": ["UCO", "feedstocks", "CIF ARA"]
 }`,
+    };
+
+    @node({
+        id: 'c6a7b1a2-4b92-4f8c-9e21-5a8d8e3e7a10',
+        name: 'Structured Output Parser27',
+        type: '@n8n/n8n-nodes-langchain.outputParserStructured',
+        version: 1.3,
+        position: [7152, 5104],
+    })
+    StructuredOutputParser27 = {
+        jsonSchemaExample: `{
+  "pathway": "D",
+  "decision": "SURFACE",
+  "vertical": "Expert",
+  "content_type": "research_paper",
+  "topic_summary": "One sentence describing what this content is about",
+  "syntech_relevance": "Brief note on any connection to biofuels, decarbonisation, or Syntech's sectors — or null if none",
+  "key_highlights": [
+    "First notable point from the content",
+    "Second notable point if present",
+    "Third notable point if present"
+  ]
+}`,
+        autoFix: true,
     };
 
     @node({
@@ -6255,6 +6261,15 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
     Merge2 = {};
 
     @node({
+        id: 'b3e1a2f8-5c7d-4e91-a6b2-7f3d8e4c1a52',
+        name: 'Merge Stage 4',
+        type: 'n8n-nodes-base.merge',
+        version: 3.2,
+        position: [7168, 5136],
+    })
+    MergeStage4 = {};
+
+    @node({
         id: 'de16c7e4-12ec-47c4-a419-f4dde2ace718',
         name: 'Perform Final Calculation',
         type: 'n8n-nodes-base.code',
@@ -6269,13 +6284,38 @@ const claudeOutput = $json.output;
 // Determine pathway
 const pathway = claudeOutput.pathway;
 
-// Calculate total score based on pathway
+// Pathway D (Expert content) bypasses scoring and always surfaces
+if (pathway === "D") {
+  const activeComponents = [];
+  if (claudeOutput.content_type) activeComponents.push(\`Type: \${claudeOutput.content_type}\`);
+  if (claudeOutput.topic_summary) activeComponents.push(\`Topic: \${claudeOutput.topic_summary}\`);
+  if (claudeOutput.syntech_relevance) activeComponents.push(\`Relevance: \${claudeOutput.syntech_relevance}\`);
+
+  return {
+    pathway: "D",
+    scoring_breakdown: null,
+    strategic_summary: claudeOutput.topic_summary || null,
+    key_highlights: claudeOutput.key_highlights || [],
+    recommended_action: claudeOutput.syntech_relevance || null,
+    total_score: null,
+    decision: "SURFACE",
+    priority_band: "EXPERT",
+    threshold_met: true,
+    active_scoring_components: activeComponents.join(" | "),
+    vertical: claudeOutput.vertical || "Expert",
+    content_type: claudeOutput.content_type || null,
+    topic_summary: claudeOutput.topic_summary || null,
+    syntech_relevance: claudeOutput.syntech_relevance || null
+  };
+}
+
+// Pathways A/B/C — standard scoring
 let total_score = 0;
 const breakdown = claudeOutput.scoring_breakdown;
 
-if (pathway === "A" && breakdown.pathway_a) {
+if (pathway === "A" && breakdown?.pathway_a) {
   const a = breakdown.pathway_a;
-  total_score = 
+  total_score =
     (a.fuel_type_gate?.points || 0) +
     (a.operational_deployment?.points || 0) +
     (a.technology_validation?.points || 0) +
@@ -6283,18 +6323,18 @@ if (pathway === "A" && breakdown.pathway_a) {
     (a.market_intelligence?.points || 0) +
     (a.oem_breakthrough?.points || 0) +
     (a.strategic_relevance?.points || 0);
-    
-} else if (pathway === "B" && breakdown.pathway_b) {
+
+} else if (pathway === "B" && breakdown?.pathway_b) {
   const b = breakdown.pathway_b;
-  total_score = 
+  total_score =
     (b.project_scale?.points || 0) +
     (b.timeline_urgency?.points || 0) +
     (b.decarbonization_commitment?.points || 0) +
     (b.strategic_positioning?.points || 0);
-    
-} else if (pathway === "C" && breakdown.pathway_c) {
+
+} else if (pathway === "C" && breakdown?.pathway_c) {
   const c = breakdown.pathway_c;
-  total_score = 
+  total_score =
     (c.policy_scale?.points || 0) +
     (c.timeline_implementation?.points || 0) +
     (c.syntech_alignment?.points || 0) +
@@ -6319,7 +6359,7 @@ if (total_score >= 10) {
 // Build active scoring components text
 const activeScoring = [];
 
-if (pathway === "A" && breakdown.pathway_a) {
+if (pathway === "A" && breakdown?.pathway_a) {
   const a = breakdown.pathway_a;
   
   if (a.fuel_type_gate?.points > 0) {
@@ -6344,9 +6384,9 @@ if (pathway === "A" && breakdown.pathway_a) {
     activeScoring.push(\`Strategic: \${a.strategic_relevance.evidence}\`);
   }
   
-} else if (pathway === "B" && breakdown.pathway_b) {
+} else if (pathway === "B" && breakdown?.pathway_b) {
   const b = breakdown.pathway_b;
-  
+
   if (b.project_scale?.points > 0) {
     activeScoring.push(\`Project Scale: \${b.project_scale.evidence}\`);
   }
@@ -6359,8 +6399,8 @@ if (pathway === "A" && breakdown.pathway_a) {
   if (b.strategic_positioning?.points > 0) {
     activeScoring.push(\`Positioning: \${b.strategic_positioning.evidence}\`);
   }
-  
-} else if (pathway === "C" && breakdown.pathway_c) {
+
+} else if (pathway === "C" && breakdown?.pathway_c) {
   const c = breakdown.pathway_c;
   
   if (c.policy_scale?.points > 0) {
@@ -6403,6 +6443,72 @@ return {
     })
     Limit16Items = {
         maxItems: 100,
+    };
+
+    @node({
+        id: 'f4d7b9a2-8e1c-4c52-9f31-3b2a7d6e4c81',
+        name: '🔀 Pathway Router',
+        type: 'n8n-nodes-base.switch',
+        version: 3.4,
+        position: [6432, 5136],
+    })
+    PathwayRouter = {
+        rules: {
+            values: [
+                {
+                    conditions: {
+                        options: {
+                            caseSensitive: true,
+                            leftValue: '',
+                            typeValidation: 'strict',
+                            version: 3,
+                        },
+                        conditions: [
+                            {
+                                id: '9b2a3c4d-1e2f-4a5b-8c9d-0e1f2a3b4c5d',
+                                leftValue: "={{ $('🪨 STAGE - 3: Topic Density Test').item.json.output.pathway }}",
+                                rightValue: 'REJECT',
+                                operator: {
+                                    type: 'string',
+                                    operation: 'contains',
+                                },
+                            },
+                        ],
+                        combinator: 'and',
+                    },
+                    renameOutput: true,
+                    outputKey: 'REJECT',
+                },
+                {
+                    conditions: {
+                        options: {
+                            caseSensitive: true,
+                            leftValue: '',
+                            typeValidation: 'strict',
+                            version: 3,
+                        },
+                        conditions: [
+                            {
+                                id: '2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f',
+                                leftValue: "={{ $('🪨 STAGE - 3: Topic Density Test').item.json.output.pathway }}",
+                                rightValue: 'D',
+                                operator: {
+                                    type: 'string',
+                                    operation: 'contains',
+                                },
+                            },
+                        ],
+                        combinator: 'and',
+                    },
+                    renameOutput: true,
+                    outputKey: 'D',
+                },
+            ],
+        },
+        options: {
+            fallbackOutput: 'extra',
+            renameFallbackOutput: 'A/B/C',
+        },
     };
 
     @node({
@@ -6516,7 +6622,7 @@ return {
   "decision": "VIP_PASS",
   "vip_entity": "Balfour Beatty",
   "baseline_points": 5,
-  "reasoning": "Article is about Balfour Beatty's contract win"
+  "reasoning": "Article is about Balfour Beatty's contract win. decision may also be CONTINUE or PATHWAY_D; vip_entity may be any of Balfour Beatty, SSE, Lower Thames Crossing, NetZero Teesside, Sizewell C, National Highways, Highland Fuels, Falkirk Council, A9 Duelling, Highland Council, Transport for London, Sunbelt Rentals, or null."
 }`,
         autoFix: true,
     };
@@ -6537,7 +6643,9 @@ return {
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
-SOURCE: {{ $('Deduplicated Articles').item.json.url }}`,
+SOURCE: {{ $('Deduplicated Articles').item.json.url }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}`,
         hasOutputParser: true,
         needsFallback: true,
         messages: {
@@ -6617,7 +6725,9 @@ Does article mention ANY biofuel keywords OR downstream policy effects?
         text: `=Check for VIP status:
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
-ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}`,
+ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}`,
         hasOutputParser: true,
         needsFallback: true,
         messages: {
@@ -6625,29 +6735,47 @@ ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}`,
                 {
                     message: `=# STAGE 2: VIP FAST-TRACK DETECTION
 
-**Purpose**: Identify articles substantially ABOUT Syntech's strategic VIP customers  
-**Decision**: VIP_PASS (bypass density check) OR CONTINUE (proceed to Stage 3)  
+**Purpose**: Identify articles substantially ABOUT Syntech's strategic VIP customers. Route expert and competitor LinkedIn content appropriately.
+**Decision**: VIP_PASS, CONTINUE, or PATHWAY_D
 **Token Budget**: 60 tokens
 
 ---
 
-## VIP CUSTOMER LIST
+## SYSTEM MESSAGE
 
-These are Syntech Biofuel's strategic customers where comprehensive business intelligence is valuable:
+### STEP 0: SOURCE CHECK (Run First)
 
-- **Lower Thames Crossing** (major UK infrastructure project)
-- **Balfour Beatty** (strategic construction partner)
-- **SSE** (energy company)
-- **NetZero Teesside** (industrial decarbonization project)
-- **Sizewell C** (nuclear construction project)
-- **Highland Fuels** (fuel distribution and energy services company)
-- **Falkirk Council** (local authority in central Scotland)
-- **A9 Duelling** (major Scottish road infrastructure upgrade project)
-- **Highland Council** (local authority for the Scottish Highlands)
+\`\`\`
+Read source_platform and source_category from input.
+
+IF source_category = "Expert" AND source_platform = "LinkedIn" → PATHWAY_D (no content check needed)
+IF source_category = "Competitor" AND source_platform = "LinkedIn" → CONTINUE (skip VIP check)
+
+All other sources → continue to Step 1
+\`\`\`
 
 ---
 
-## CRITICAL INSTRUCTION
+### VIP CUSTOMER LIST
+
+These are Syntech Biofuel's strategic customers where comprehensive business intelligence is valuable:
+
+- **Balfour Beatty** (strategic construction partner)
+- **SSE** (energy company)
+- **Lower Thames Crossing** (major UK infrastructure project)
+- **NetZero Teesside** (industrial decarbonisation project)
+- **Sizewell C** / **Sizewell C Consortium** (nuclear construction project)
+- **National Highways** (strategic highways authority)
+- **Highland Fuels** (fuel distribution and energy services)
+- **Falkirk Council** (local authority, central Scotland)
+- **A9 Duelling** (major Scottish road infrastructure project)
+- **Highland Council** (local authority, Scottish Highlands)
+- **Transport for London** / **TFL** (strategic transport authority)
+- **Sunbelt Rentals** (equipment rental, UK & Ireland and Inc)
+
+---
+
+### CRITICAL INSTRUCTION
 
 **DO NOT trigger VIP_PASS just because a VIP is mentioned.**
 
@@ -6666,81 +6794,76 @@ An article gets VIP_PASS ONLY if the VIP customer is the **primary subject** of 
 
 ---
 
-## DECISION TREE
+### DECISION TREE
 
 \`\`\`
 Step 1: Is VIP mentioned in headline?
-├─ YES → VIP_PASS (article is ABOUT this customer)
+├─ YES → VIP_PASS
 └─ NO → Continue to Step 2
 
 Step 2: Count how many times VIP appears in article body
-├─ 0-1 mentions → CONTINUE (incidental reference, not primary subject)
+├─ 0-1 mentions → CONTINUE
 └─ 2+ mentions → Continue to Step 3
 
 Step 3: Are multiple paragraphs substantially ABOUT the VIP?
-├─ NO (just listed among other topics) → CONTINUE
-└─ YES (VIP is main focus) → VIP_PASS
+├─ NO → CONTINUE
+└─ YES → VIP_PASS
 \`\`\`
 
 ---
 
-## EXAMPLES
+### EXAMPLES
 
-### EXAMPLE 1: VIP_PASS ✓
-**Article:** "Lower Thames Crossing receives £891M additional budget allocation. Construction enabling works underway with early 2030s completion target. Project will create 2.6-mile tunnel linking A2/M2 with A13/M25."
-
-**Analysis:**
+**EXAMPLE 1: VIP_PASS ✓**
+Article: "Lower Thames Crossing receives £891M additional budget allocation. Construction enabling works underway with early 2030s completion target."
 - VIP in headline: YES
-- Article focus: Entirely about LTC project updates
 - Decision: **VIP_PASS**
 - Baseline points: 5
 
 ---
 
-### EXAMPLE 2: CONTINUE ✗
-**Article:** "Motorists lost £3.6M in unused Dart Charge payments. National Highways spokesman said revenue is ring-fenced for transport projects including the Lower Thames Crossing."
-
-**Analysis:**
+**EXAMPLE 2: CONTINUE ✗**
+Article: "Motorists lost £3.6M in unused Dart Charge payments. Revenue is ring-fenced for transport projects including the Lower Thames Crossing."
 - VIP in headline: NO
-- Mentions: 1 (single reference in context of where revenue goes)
-- Primary subject: Dart Charge payment system, NOT LTC project
+- Mentions: 1 (passing reference)
 - Decision: **CONTINUE**
-- Baseline points: 0
 
 ---
 
-### EXAMPLE 3: CONTINUE ✗
-**Article:** "Steel manufacturer ArcelorMittal loses court battle over Chatham Docks redevelopment. The firm has supplied HS2, Thames Tideway, and was hoping to supply the Lower Thames Crossing."
-
-**Analysis:**
+**EXAMPLE 3: CONTINUE ✗**
+Article: "Steel manufacturer ArcelorMittal loses court battle over Chatham Docks. The firm was hoping to supply the Lower Thames Crossing."
 - VIP in headline: NO
-- Mentions: 1 (historical context of company's projects)
-- Primary subject: ArcelorMittal legal case, NOT LTC
+- Mentions: 1 (historical context)
 - Decision: **CONTINUE**
-- Baseline points: 0
 
 ---
 
-### EXAMPLE 4: VIP_PASS ✓
-**Article:** "Balfour Beatty announces Q4 revenue growth of 15% driven by major infrastructure projects. Company confirms strong order book for 2026 including continued work on Lower Thames Crossing partnership with National Highways."
-
-**Analysis:**
+**EXAMPLE 4: VIP_PASS ✓**
+Article: "Balfour Beatty announces Q4 revenue growth of 15% driven by major infrastructure projects including continued work on Lower Thames Crossing."
 - VIP in headline: YES (Balfour Beatty)
-- Article focus: Balfour Beatty business performance
-- Multiple paragraphs: Business updates about strategic customer
 - Decision: **VIP_PASS**
 - Baseline points: 5
 
 ---
 
-## OUTPUT FORMAT
+**EXAMPLE 5: PATHWAY_D (auto)**
+Source: LinkedIn / Expert — any content
+- Decision: **PATHWAY_D** (no content check needed)
 
-Return only this JSON structure:
+---
+
+**EXAMPLE 6: CONTINUE (auto)**
+Source: LinkedIn / Competitor — any content
+- Decision: **CONTINUE** (skip VIP check, proceed to Stage 3)
+
+---
+
+### OUTPUT FORMAT
 
 \`\`\`json
 {
-  "decision": "VIP_PASS" | "CONTINUE",
-  "vip_entity": "Lower Thames Crossing" | "Balfour Beatty" | "SSE" | "NetZero Teesside" | "Sizewell C" | null,
+  "decision": "VIP_PASS" | "CONTINUE" | "PATHWAY_D",
+  "vip_entity": "Balfour Beatty" | "SSE" | "Lower Thames Crossing" | "NetZero Teesside" | "Sizewell C" | "National Highways" | "Highland Fuels" | "Falkirk Council" | "A9 Duelling" | "Highland Council" | "Transport for London" | "Sunbelt Rentals" | null,
   "baseline_points": 5 | 0,
   "reasoning": "Brief explanation: Is VIP in headline? How many mentions? Is article substantially ABOUT the VIP or just mentioning them?"
 }
@@ -6748,15 +6871,13 @@ Return only this JSON structure:
 
 ---
 
-## CRITICAL REMINDERS
+### CRITICAL REMINDERS
 
-1. **Be strict:** VIP_PASS requires article to be ABOUT the customer, not just mention them
-2. **Single mentions:** Almost always CONTINUE unless in headline
-3. **Context matters:** "Revenue goes to projects including X" is NOT about X
-4. **Historical references:** "Was hoping to supply X" is NOT about X
-5. **When in doubt:** CONTINUE (let Stage 3 and 4 evaluate on merit)
-
-The goal is strategic customer intelligence - articles where the VIP's business activities, projects, or operations are the main story.`,
+1. **Expert LinkedIn** → always PATHWAY_D, no content check needed
+2. **Competitor LinkedIn** → always CONTINUE, skip VIP check entirely
+3. **Be strict on VIP_PASS** — article must be ABOUT the customer, not just mention them
+4. **Single mentions** → almost always CONTINUE unless in headline
+5. **When in doubt** → CONTINUE (let Stage 3 and Stage 4A evaluate on merit)`,
                 },
             ],
         },
@@ -6928,48 +7049,66 @@ The goal is strategic customer intelligence - articles where the VIP's business 
     })
     Stage3TopicDensityTest = {
         promptType: 'define',
-        text: `=Verify biofuel focus:
+        text: `=Classify this article:
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
 
 Stage 1 Keywords: {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output.biofuel_keywords_found.join(", ") }}
-Stage 2 VIP Status: {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output.decision }} - {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output.reason }}`,
+Stage 2 VIP Status: {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output.decision }} - {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output.reasoning }}`,
         hasOutputParser: true,
         needsFallback: true,
         messages: {
             messageValues: [
                 {
-                    message: `=# STAGE 3: CONTENT ROUTER - FINAL
+                    message: `=# STAGE 3: CONTENT ROUTER
 
 **Purpose**: Classify article into appropriate evaluation pathway
-**Decision**: Route to Pathway A, B, C, or REJECT
+**Decision**: Route to Pathway A, B, C, D, or REJECT
 **Token Budget**: 50 tokens
 
 ---
 
-## CORE UNDERSTANDING
+## SYSTEM MESSAGE
 
-This stage **does not evaluate quality** - it only determines which TYPE of valuable content this is.
+### STEP 0: SOURCE CHECK (Run First)
 
-Tim values THREE types of intelligence:
-1. **Direct biofuel content** - Adoption, tech validation, market intel
-2. **VIP strategic intelligence** - Customer projects creating fuel demand
-3. **Regulatory/market forces** - Policy/budget creating biofuel opportunities
+\`\`\`
+Read source_platform and source_category from input.
 
-Each pathway gets evaluated differently in Stage 4.
+IF source_category = "Expert" AND source_platform = "LinkedIn" → PATHWAY D (auto)
+IF source_category = "Customer" AND source_platform = "LinkedIn" → PATHWAY B (auto)
+IF source_category = "Competitor" AND source_platform = "LinkedIn" → run normal routing with PERMISSIVE BIAS
+
+All other sources → run normal routing
+\`\`\`
+
+---
+
+### CORE UNDERSTANDING
+
+This stage determines which TYPE of content this is. Tim values FOUR types of intelligence:
+
+1. **Pathway A** — Direct biofuel content (adoption, tech validation, market intel)
+2. **Pathway B** — VIP strategic intelligence (customer projects creating fuel demand)
+3. **Pathway C** — Regulatory/market forces (policy creating biofuel opportunities)
+4. **Pathway D** — Expert thought leadership (climate, decarbonisation, broader research)
+
+Each pathway is evaluated differently in Stage 4A or Stage 4B.
 
 ---
 
 ## PATHWAY CLASSIFICATION
 
-Analyze the article and determine which pathway it belongs to. Check pathways in order.
+Check pathways in order.
 
 ---
 
-### PATHWAY A: BIOFUEL CONTENT
+#### PATHWAY A: BIOFUEL CONTENT
 
 **Route here if article explicitly discusses biofuels.**
 
@@ -6983,235 +7122,190 @@ Analyze the article and determine which pathway it belongs to. Check pathways in
 **Examples that trigger Pathway A:**
 - ✅ "Festival powers stages with B100 from UCO, 90% reduction"
 - ✅ "John Deere approves B30 across Tier 4 engines"
-- ✅ "Swedish RD demand hits record high" (even if paywalled)
+- ✅ "Swedish RD demand hits record high"
 - ✅ "Marine vessel uses 8,990 tonnes UCOME"
-- ✅ "Hydrogen tugboat demonstrates B100 in zero-carbon voyage"
-- ✅ "Restaurant Technologies recycled 390M lbs UCO"
-- ✅ "EIA forecasts RD production 250K→290K bpd by 2027"
-- ✅ "Lloyd's Register launches FAME handling training course"
-- ✅ "UCO CIF ARA pricing gains amid tight supply" (even paywalled)
-
-**Context doesn't matter:**
-- Maritime using UCOME → Pathway A (proves UCO-fuel works)
-- Festival using B100 → Pathway A (shows off-grid adoption)
-- Aviation SAF + renewable diesel → Pathway A (RD production matters)
-- Training courses on FAME → Pathway A (market maturation signal)
+- ✅ "UCO CIF ARA pricing gains amid tight supply"
 
 **If biofuel keywords present → PATHWAY A**
 
 ---
 
-### PATHWAY B: VIP STRATEGIC INTELLIGENCE
+#### PATHWAY B: VIP STRATEGIC INTELLIGENCE
 
 **Route here if article is about VIP entities/projects WITHOUT explicit biofuel discussion.**
 
 **Triggers:**
-- VIP entity mentioned: Lower Thames Crossing, Balfour Beatty, SSE, NetZero Teesside, Sizewell C
+- VIP entity mentioned: Balfour Beatty, SSE, Lower Thames Crossing, NetZero Teesside, Sizewell C, Sizewell C Consortium, National Highways, Highland Fuels, Falkirk Council, A9 Duelling, Highland Council, Transport for London, TFL, Sunbelt Rentals
 - Major infrastructure projects (£1bn+ construction, roads, utilities)
 - Capital expenditure on fuel-consuming sectors (construction, transport, logistics)
-- Decarbonization commitments from strategic customers
+- Decarbonisation commitments from strategic customers
 - Public sector procurement with emissions requirements
-
-**Why this matters:**
-These are Syntech's strategic customers. ANY significant news about them is valuable because:
-- Infrastructure projects = fuel demand for equipment/generators
-- Decarbonization commitments = future biofuel opportunities
-- Budget allocations = sales pipeline signals
 
 **Examples that trigger Pathway B:**
 - ✅ "£10.2bn Lower Thames Crossing construction starts 2026"
-- ✅ "£3.3bn budget for transport schemes including LTC"
 - ✅ "Balfour Beatty wins £800M highway contract"
-- ✅ "Public sector procurement mandates 50% emissions reduction"
 - ✅ "SSE commits to net-zero construction fleet by 2028"
+- ✅ "Transport for London announces major fleet decarbonisation programme"
+- ✅ "Sunbelt Rentals UK expands equipment fleet for infrastructure projects"
 
-**Does NOT require:**
-- Biofuel keywords (that's Pathway A)
-- Specific fuel mentions (demand signal is enough)
+**Auto-route:** LinkedIn / Customer → always PATHWAY B
 
-**If VIP entity + infrastructure/budget/decarbonization → PATHWAY B**
+**If VIP entity + infrastructure/budget/decarbonisation → PATHWAY B**
 
 ---
 
-### PATHWAY C: REGULATORY/MARKET FORCES
+#### PATHWAY C: REGULATORY/MARKET FORCES
 
 **Route here if article discusses policy/regulation affecting biofuel demand.**
 
 **Triggers:**
 - UK government budget allocations for net-zero/transport/infrastructure
 - RTFO mandate changes, renewable fuel standards, carbon pricing
-- Public procurement policy (emissions requirements, sustainability criteria)
+- Public procurement policy with emissions requirements
 - Energy policy affecting fuel markets (even without "biofuel" keyword)
 - Market analysis showing demand drivers for low-carbon fuels
-
-**Why this matters:**
-Policy creates market conditions. Even without saying "biofuel," these articles signal:
-- Future demand creation
-- Regulatory tailwinds
-- Market opportunities
 
 **Examples that trigger Pathway C:**
 - ✅ "UK budget expands funding for energy efficiency and transport schemes"
 - ✅ "New public sector procurement rules require net-zero solutions"
-- ✅ "Government increases capital expenditure £3.3bn for infrastructure"
 - ✅ "RTFO consultation proposes mandate increase for 2027"
-- ✅ "Net-zero policy drives demand for drop-in fuel alternatives"
-
-**Does NOT require:**
-- Biofuel keywords (Pathway A would catch those)
-- VIP entities (Pathway B would catch those)
-- Just needs: policy + market impact on fuel demand
+- ✅ "Government increases capital expenditure £3.3bn for infrastructure"
 
 **If regulatory/policy + fuel market impact → PATHWAY C**
 
 ---
 
-### REJECT
+#### PATHWAY D: EXPERT THOUGHT LEADERSHIP
 
-**Only reject if article matches NONE of the above pathways.**
+**Route here if content is from an expert/thought leader OR covers broader climate, decarbonisation, or environmental research.**
 
-**Reject if:**
-- No biofuel keywords AND
-- No VIP entities AND  
-- No regulatory/policy fuel demand drivers AND
-- Generic news unrelated to Syntech's business
+**Auto-route:** LinkedIn / Expert → always PATHWAY D
 
-**Examples to reject:**
-- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, or policy)
-- ❌ "New office development announced in Manchester" (generic construction)
-- ❌ "Heating system manufacturer wins industry award" (unrelated sector)
-- ❌ "Electric vehicle charging infrastructure expands" (EVs, not biofuels)
+**Triggers (for non-LinkedIn sources):**
+- Climate science, research papers, academic findings
+- Decarbonisation policy opinion and analysis
+- Environmental impact reporting
+- Broader energy transition commentary
+- Content clearly from a recognised thought leader or research institution
 
-**Be conservative with REJECT** - when in doubt, route to appropriate pathway and let Stage 4 decide.
+**Examples that trigger Pathway D:**
+- ✅ "New paper: methane emissions 70% higher than reported" (LinkedIn / Expert)
+- ✅ "Why net zero policy timelines are misaligned with climate data" (LinkedIn / Expert)
+- ✅ "IPCC report findings on fossil fuel phase-out timelines"
+- ✅ "Academic study: UCO supply chains and circular economy benefits"
+
+**If expert/climate/research content with no biofuel/VIP/policy trigger → PATHWAY D**
 
 ---
 
-## DECISION LOGIC
+#### REJECT
+
+**Only reject if article matches NONE of the above pathways.**
+
+- No biofuel keywords AND
+- No VIP entities AND
+- No regulatory/policy fuel demand drivers AND
+- No expert/climate/research content AND
+- Generic news unrelated to Syntech's business
+
+**Examples to reject:**
+- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, policy, or expert)
+- ❌ "New office development announced in Manchester" (generic construction)
+- ❌ "Electric vehicle charging infrastructure expands" (EVs, not biofuels)
+
+---
+
+### DECISION LOGIC
 
 \`\`\`
-Step 1: Check for biofuel keywords
-  ├─ YES (UCO, HVO, FAME, biodiesel, etc.) → PATHWAY A
-  └─ NO → Continue to Step 2
+Step 0: Source check
+  ├─ LinkedIn / Expert → PATHWAY D (auto)
+  ├─ LinkedIn / Customer → PATHWAY B (auto)
+  ├─ LinkedIn / Competitor → run below with PERMISSIVE BIAS
+  └─ All other sources → run below normally
 
-Step 2: Check for VIP entities or strategic infrastructure
-  ├─ YES (LTC, major projects, VIP customers) → PATHWAY B
-  └─ NO → Continue to Step 3
+Step 1: Biofuel keywords present?
+  ├─ YES → PATHWAY A
+  └─ NO → Step 2
 
-Step 3: Check for regulatory/policy fuel demand drivers
-  ├─ YES (budget, policy, procurement rules) → PATHWAY C
+Step 2: VIP entity or strategic infrastructure?
+  ├─ YES → PATHWAY B
+  └─ NO → Step 3
+
+Step 3: Regulatory/policy fuel demand drivers?
+  ├─ YES → PATHWAY C
+  └─ NO → Step 4
+
+Step 4: Expert/climate/research content?
+  ├─ YES → PATHWAY D
   └─ NO → REJECT
 \`\`\`
 
 ---
 
-## SPECIAL CASES
+### PERMISSIVE BIAS (Competitor LinkedIn Only)
 
-### Paywalled Articles
-**If article is paywalled, analyze the HEADLINE:**
-- Headline with biofuel keywords → PATHWAY A
-- Headline with VIP entity → PATHWAY B  
-- Headline with policy/budget → PATHWAY C
-- Generic headline → REJECT
+When source_category = "Competitor" and source_platform = "LinkedIn":
+- Lower the threshold for all pathways
+- If borderline between a pathway and REJECT → route to pathway
+- Prefer to surface competitor content and let Stage 4A score on merit
+- Apply normal pathway logic otherwise
 
-**Examples:**
-- ✅ "Swedish RD demand extends record high" → PATHWAY A (specific biofuel market data)
-- ✅ "UCO CIF ARA gains, vegoil spreads mixed" → PATHWAY A (UCO pricing intelligence)
-- ✅ "Petrobras to supply B24 to Norwegian shipper" → PATHWAY A (B24 supply agreement)
+---
 
-### Articles Mentioning Multiple Pathways
-**If article could fit multiple pathways, prioritize in this order:**
-1. Pathway A (biofuel content) - most directly relevant
-2. Pathway B (VIP strategic) - customer intelligence
-3. Pathway C (regulatory) - market forces
+### SPECIAL CASES
 
-**Example:**
-"Lower Thames Crossing project requires biodiesel for construction fleet"
+**Paywalled Articles**
+Analyse the headline only:
+- Biofuel keywords → PATHWAY A
+- VIP entity → PATHWAY B
+- Policy/budget → PATHWAY C
+- Expert/climate → PATHWAY D
+- Generic → REJECT
+
+**Multiple Pathway Match**
+Prioritise in this order: A → B → C → D
+
+**Example:** "Lower Thames Crossing project requires biodiesel for construction fleet"
 → PATHWAY A (biofuel explicitly mentioned, even though LTC is VIP)
 
 ---
 
-## OUTPUT FORMAT
-
-Return only this JSON:
+### OUTPUT FORMAT
 
 \`\`\`json
 {
-  "pathway": "A" | "B" | "C" | "REJECT",
+  "pathway": "A" | "B" | "C" | "D" | "REJECT",
   "confidence": "high" | "medium" | "low",
   "reasoning": "One sentence explaining why this pathway was selected",
-  "keywords_detected": ["keyword1", "keyword2", ...] | null
+  "keywords_detected": ["keyword1", "keyword2"] | null
 }
 \`\`\`
 
 **Confidence levels:**
 - **high**: Clear match to pathway criteria
 - **medium**: Borderline but leans toward pathway
-- **low**: Uncertain, but routing to pathway to be safe
+- **low**: Uncertain, routing to pathway to be safe
 
 ---
 
-## EXAMPLES
+### EXAMPLES
 
-### Example 1: Pathway A (Direct Biofuel)
-**Article**: "WOMADelaide festival powers all stages using B100 and HVO from used cooking oil, achieving 90% greenhouse gas reduction compared to diesel"
-
+**Example 1: Pathway A (Direct Biofuel)**
+Article: "WOMADelaide festival powers all stages using B100 and HVO from used cooking oil, achieving 90% greenhouse gas reduction"
 \`\`\`json
 {
   "pathway": "A",
   "confidence": "high",
   "reasoning": "Explicit biofuel adoption with specific fuels (B100, HVO) and UCO feedstock",
-  "keywords_detected": ["B100", "HVO", "used cooking oil", "greenhouse gas reduction"]
+  "keywords_detected": ["B100", "HVO", "used cooking oil"]
 }
 \`\`\`
 
 ---
 
-### Example 2: Pathway A (Maritime UCOME)
-**Article**: "Toyota Motor Europe cut 22,000 tonnes CO2e using UECC's biofuel program with 8,990 tonnes UCOME for vehicle shipments"
-
-\`\`\`json
-{
-  "pathway": "A",
-  "confidence": "high",
-  "reasoning": "UCOME biofuel with specific volumes and verified emissions reduction",
-  "keywords_detected": ["UCOME", "biofuel", "CO2e", "8,990 tonnes"]
-}
-\`\`\`
-
----
-
-### Example 3: Pathway A (Paywalled with Keyword Headline)
-**Title**: "Swedish 100% RD demand extends record high, SAF blend hits 1-yr high"
-**Body**: [PAYWALLED]
-
-\`\`\`json
-{
-  "pathway": "A",
-  "confidence": "high",
-  "reasoning": "Headline contains specific biofuel market intelligence (RD demand, SAF blend)",
-  "keywords_detected": ["RD", "renewable diesel", "SAF", "demand"]
-}
-\`\`\`
-
----
-
-### Example 4: Pathway A (Hydrogen + B100)
-**Article**: "Japan launches world's first hydrogen-powered tugboat, achieving zero-carbon voyage using hydrogen and B100 biodiesel fuel"
-
-\`\`\`json
-{
-  "pathway": "A",
-  "confidence": "high",
-  "reasoning": "B100 biodiesel explicitly mentioned as part of fuel system demonstration",
-  "keywords_detected": ["B100", "biodiesel", "zero-carbon"]
-}
-\`\`\`
-
----
-
-### Example 5: Pathway B (VIP Infrastructure)
-**Article**: "Top 100 construction projects to drive £39bn of work in 2026. The largest scheme is the £10.2bn Lower Thames Crossing tunnels and approaches work in Kent"
-
+**Example 2: Pathway B (VIP Infrastructure)**
+Article: "Top 100 construction projects to drive £39bn of work in 2026. The largest scheme is the £10.2bn Lower Thames Crossing tunnels"
 \`\`\`json
 {
   "pathway": "B",
@@ -7223,9 +7317,21 @@ Return only this JSON:
 
 ---
 
-### Example 6: Pathway C (Regulatory/Budget)
-**Article**: "UK government budget includes expanded funding for energy efficiency, warm homes programmes and major transport schemes. Government increased capital expenditure by £3.3bn including Lower Thames Crossing"
+**Example 3: Pathway B (auto — Customer LinkedIn)**
+Source: LinkedIn / Customer — any content
+\`\`\`json
+{
+  "pathway": "B",
+  "confidence": "high",
+  "reasoning": "Customer LinkedIn source — auto-routed to Pathway B",
+  "keywords_detected": null
+}
+\`\`\`
 
+---
+
+**Example 4: Pathway C (Regulatory/Budget)**
+Article: "UK government budget includes expanded funding for energy efficiency and major transport schemes. Capital expenditure increased by £3.3bn"
 \`\`\`json
 {
   "pathway": "C",
@@ -7237,74 +7343,54 @@ Return only this JSON:
 
 ---
 
-### Example 7: Pathway A (OEM Approval)
-**Article**: "Clean Fuels Alliance America recognizes John Deere for approving B30 biodiesel blends across entire portfolio of Tier 4 engines, expanding market access for farmers"
-
+**Example 5: Pathway D (Expert LinkedIn)**
+Source: LinkedIn / Expert — post about methane emissions research
 \`\`\`json
 {
-  "pathway": "A",
+  "pathway": "D",
   "confidence": "high",
-  "reasoning": "OEM approval for B30 biodiesel - direct biofuel market expansion",
-  "keywords_detected": ["B30", "biodiesel", "Tier 4 engines"]
-}
-\`\`\`
-
----
-
-### Example 8: REJECT
-**Article**: "Construction workforce skills shortage impacts project delivery across infrastructure sectors. Industry needs better training and recruitment strategies"
-
-\`\`\`json
-{
-  "pathway": "REJECT",
-  "confidence": "high",
-  "reasoning": "Generic construction workforce article with no biofuel, VIP, or regulatory fuel demand relevance",
+  "reasoning": "Expert LinkedIn source — auto-routed to Pathway D",
   "keywords_detected": null
 }
 \`\`\`
 
 ---
 
-### Example 9: Pathway A (Training/Market Maturation)
-**Article**: "Lloyd's Register launches new FAME handling course focused on safe handling of Fatty Acid Methyl Esters biofuels for industry personnel"
-
+**Example 6: Pathway D (Climate Research)**
+Article: "IPCC findings show fossil fuel emissions must halve by 2030 to limit warming to 1.5°C"
 \`\`\`json
 {
-  "pathway": "A",
-  "confidence": "medium",
-  "reasoning": "FAME biofuel training course signals market maturation and industry adoption",
-  "keywords_detected": ["FAME", "Fatty Acid Methyl Esters", "biofuels"]
-}
-\`\`\`
-
----
-
-### Example 10: Pathway A (UCO Market Intelligence)
-**Title**: "European feedstocks: UCO CIF ARA gains, vegoil-gasoil spreads mixed"
-**Body**: [PAYWALLED]
-
-\`\`\`json
-{
-  "pathway": "A",
+  "pathway": "D",
   "confidence": "high",
-  "reasoning": "UCO feedstock pricing headline indicates actionable market intelligence",
-  "keywords_detected": ["UCO", "feedstocks", "CIF ARA"]
+  "reasoning": "Climate research from authoritative source — broader decarbonisation context relevant to Syntech's narrative",
+  "keywords_detected": ["fossil fuel emissions", "decarbonisation"]
 }
 \`\`\`
 
 ---
 
-## CRITICAL REMINDERS
+**Example 7: REJECT**
+Article: "Construction workforce skills shortage impacts project delivery across infrastructure sectors"
+\`\`\`json
+{
+  "pathway": "REJECT",
+  "confidence": "high",
+  "reasoning": "Generic construction workforce article with no biofuel, VIP, regulatory, or expert relevance",
+  "keywords_detected": null
+}
+\`\`\`
 
-1. **Context doesn't disqualify** - Maritime, aviation, festivals, training all valid if biofuel keywords present
-2. **Proof matters more than sector** - Marine B100 proving 81% reduction = valuable even though wrong sector
-3. **VIP news inherently valuable** - Infrastructure spending creates fuel demand
-4. **Policy creates opportunities** - Budget allocations signal future sales pipeline
-5. **Paywalled headlines count** - If headline has specifics, substance exists
-6. **When uncertain, route to pathway** - Let Stage 4 make final quality judgment
-7. **Only reject if clearly unrelated** - No biofuel, no VIP, no policy = reject
+---
 
-**Philosophy**: Be a generous router. Stage 4 will apply Tim's quality standards. Stage 3 just needs to identify the TYPE of content.`,
+### CRITICAL REMINDERS
+
+1. **Customer LinkedIn** → always Pathway B, no content check needed
+2. **Expert LinkedIn** → always Pathway D, no content check needed
+3. **Competitor LinkedIn** → permissive bias, prefer to route over reject
+4. **Context doesn't disqualify** → maritime, aviation, festivals all valid for Pathway A
+5. **Pathway D is broader** → climate/decarbonisation content without biofuel keywords is fine
+6. **Only reject if clearly unrelated** → no biofuel, no VIP, no policy, no expert = reject
+7. **When uncertain, route** → Stage 4A/4B makes the final quality judgment`,
                 },
             ],
         },
@@ -9161,28 +9247,30 @@ IF score < 3 → REJECT
 
     @node({
         id: '7a8e8544-04cc-40cf-8f76-39f5895e325c',
-        name: 'STAGE - 4: Classification Agent (Claude Optimisation)',
+        name: '📊 STAGE - 4A: Strategic Value Scorer',
         type: '@n8n/n8n-nodes-langchain.chainLlm',
         version: 1.9,
         position: [6912, 5328],
     })
-    Stage4ClassificationAgentClaudeOptimisation = {
+    Stage4aStrategicValueScorer = {
         promptType: '=define',
         text: `=Score this article using your decision tree framework:
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
 SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
 
-**Stage 1 - Fossil Fuel Check:**
+**Stage 1 — Fossil Fuel Check:**
 {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output?.toJsonString() }}
 
-**Stage 2 - VIP Detection:**
+**Stage 2 — VIP Detection:**
 {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output?.toJsonString() || 'Failed to analyse' }}
 
-**Stage 3 - Biofuel Focus:**
+**Stage 3 — Content Router:**
 {{ $json.analysis?.toJsonString?.() ?? JSON.stringify($json.analysis ?? 'VIP ARTICLE') }}
 
 Evaluate and provide scoring breakdown with final decision.`,
@@ -9191,48 +9279,66 @@ Evaluate and provide scoring breakdown with final decision.`,
         messages: {
             messageValues: [
                 {
-                    message: `=# STAGE 4: PATHWAY-AWARE STRATEGIC VALUE SCORER - FINAL
+                    message: `=# STAGE 4A: PATHWAY-AWARE STRATEGIC VALUE SCORER
 
 **Purpose**: Assess strategic value using Tim's decision-making framework, adapted per pathway
 **Decision**: SCORE (0-21 points) + threshold check (≥3 = surface to client)
-**Token Budget**: Unlimited - this is the brain
+**Token Budget**: Unlimited — this is the brain
+**Handles**: Pathways A, B, and C only. Pathway D is handled by Stage 4B.
 
 ---
 
-## THINKING LIKE TIM - CORE PRINCIPLES
+## SYSTEM MESSAGE
+
+### STEP 0: SOURCE CHECK (Run First)
+
+\`\`\`
+Read source_platform and source_category from input.
+
+IF source_category = "Competitor" AND source_platform = "LinkedIn":
+  → Apply PERMISSIVE SCORING BIAS throughout
+  → Lower thresholds for substance gates
+  → When borderline on any component, award the points
+  → Flag competitor_intel: true in output
+
+All other sources → apply standard scoring
+\`\`\`
+
+---
+
+### THINKING LIKE TIM — CORE PRINCIPLES
 
 From transcript analysis and client feedback, Tim evaluates articles by asking:
 
-1. **"Does this prove the fuel works?"** - Quantified results, OEM approvals, operational validation
-2. **"Can we learn something actionable?"** - Market intelligence we can't easily Google
-3. **"Does this show adoption/progress?"** - Actual deployment, not just announcements
-4. **"Is this novel or routine?"** - Strategic intel vs standard compliance
+1. **"Does this prove the fuel works?"** — Quantified results, OEM approvals, operational validation
+2. **"Can we learn something actionable?"** — Market intelligence we can't easily Google
+3. **"Does this show adoption/progress?"** — Actual deployment, not just announcements
+4. **"Is this novel or routine?"** — Strategic intel vs standard compliance
 
-**Key insight from transcripts**: 
+**Key insight from transcripts:**
 
-> "The interesting thing about this is it's not interesting to us from a marine perspective, but it's good from the point of view it's reporting about the reduction in particles... people are using this stuff and it proves that it is 81%... **strong evidence that what we're doing matters**." - Tim on marine B100 article
+> "The interesting thing about this is it's not interesting to us from a marine perspective, but it's good from the point of view it's reporting about the reduction in particles... people are using this stuff and it proves that it is 81%... **strong evidence that what we're doing matters**." — Tim on marine B100 article
 
 **Tim doesn't care about CONTEXT (festivals, maritime, awards). He cares about PROOF and ACTIONABLE INTELLIGENCE.**
 
 ---
 
-## STEP 1: READ PATHWAY FROM STAGE 3
+### STEP 1: READ PATHWAY FROM STAGE 3
 
 \`\`\`
-pathway = Stage3 classification ("A", "B", or "C")
+pathway = Stage 3 classification ("A", "B", or "C")
 
 IF pathway === "A" → Apply BIOFUEL CONTENT evaluation
-IF pathway === "B" → Apply VIP STRATEGIC evaluation  
+IF pathway === "B" → Apply VIP STRATEGIC evaluation
 IF pathway === "C" → Apply REGULATORY/MARKET evaluation
+IF pathway === "D" → ERROR (should be handled by Stage 4B, not this stage)
 \`\`\`
-
-Each pathway has different substance requirements and scoring criteria.
 
 ---
 
 ## PATHWAY A: BIOFUEL CONTENT EVALUATION
 
-**This is the primary pathway - articles explicitly about biofuels.**
+**This is the primary pathway — articles explicitly about biofuels.**
 
 ### A1: FUEL TYPE GATE (Disqualifying)
 
@@ -9250,290 +9356,144 @@ Is article about:
 
 ---
 
-### A2: SUBSTANCE GATE (Disqualifying) - TIM'S THREE QUESTIONS
-
-**These are Tim's actual decision criteria from transcripts:**
+### A2: SUBSTANCE GATE (Disqualifying) — TIM'S THREE QUESTIONS
 
 #### Question 1: SPECIFIC ADOPTION?
 **Does article say WHO is using WHAT fuel?**
 
-**PASS - Specific examples:**
+**PASS — Specific examples:**
 - ✅ "WOMADelaide festival uses B100 from UCO" (WHO: festival, WHAT: B100)
 - ✅ "John Deere approves B30 across Tier 4 engines" (WHO: John Deere, WHAT: B30)
-- ✅ "Marine vessel completes voyage on B100" (WHO: vessel, WHAT: B100)
-- ✅ "Restaurant Technologies recycled 390M lbs UCO" (WHO: RT, WHAT: UCO collection)
 - ✅ "UECC uses 8,990 tonnes UCOME for Toyota shipments" (WHO: UECC/Toyota, WHAT: UCOME)
 
-**FAIL - Too generic:**
+**FAIL — Too generic:**
 - ❌ "Government supports biofuels" (WHO: vague, WHAT: vague)
-- ❌ "Industry expected to grow" (WHO: nobody specific, WHAT: generic)
-- ❌ "Market shows promise" (WHO: nobody, WHAT: aspirational)
+- ❌ "Industry expected to grow" (no specific adoption)
 
-**If NO specific WHO/WHAT → REJECT**
+**Competitor LinkedIn permissive exception:** If source_category = "Competitor", a named competitor using or producing a specific fuel type qualifies even without full WHO/WHAT detail.
+
+**If NO specific WHO/WHAT → REJECT** (unless competitor LinkedIn permissive bias applies)
 
 ---
 
 #### Question 2: MEASURABLE DATA?
 **Does article provide QUANTIFIED information?**
 
-**PASS - Measurable examples:**
+**PASS — Measurable examples:**
 - ✅ "390 million pounds UCO recycled" (volume)
 - ✅ "81% black carbon reduction" (percentage)
-- ✅ "50,000 tonnes/year renewable diesel" (capacity)
 - ✅ "B30 across entire Tier 4 engine line" (scope)
-- ✅ "8,990 tonnes UCOME, 22K tonnes CO2e reduction" (volumes + impact)
 - ✅ "EIA: RD production 250K→290K bpd by 2027" (market forecast)
 
-**FAIL - Vague claims:**
-- ❌ "Promising results" (no numbers)
-- ❌ "Significant reduction" (how much?)
-- ❌ "Market growing" (by how much?)
-
-**SPECIAL CASE - OEM Approvals:**
+**SPECIAL CASE — OEM Approvals:**
 Even without deployment volumes, OEM approvals pass this check because they're inherently measurable (scope: "entire Tier 4 line", "all equipment", etc.)
 
-**If NO measurable data AND not an OEM approval → REJECT**
+**If NO measurable data AND not an OEM approval → REJECT** (unless competitor LinkedIn permissive bias applies)
 
 ---
 
 #### Question 3: PROOF/PROGRESS (Not Localized Obstacles)?
 **Is article about something HAPPENING or just one company's problems?**
 
-**PASS - Progress/Adoption:**
-- ✅ Facilities going operational with fuel production
-- ✅ Fleets deploying biodiesel with operational results
-- ✅ Technology validation proving fuel works (even wrong sector)
-- ✅ OEM approvals expanding market compatibility
-- ✅ UCO collection/supply chain developments at scale
-- ✅ Market-wide regulatory changes
-- ✅ Competitive intelligence: facilities GOING LIVE (not announced)
-
-**PASS - Market-Wide Obstacles (These Matter):**
+**PASS — Market-Wide Obstacles (These Matter):**
 - ✅ "UK regulation delays ALL biodiesel facilities" (affects Syntech + market)
 - ✅ "UCO supply disrupted by China export restrictions" (global feedstock impact)
-- ✅ "SAF demand affects UCO availability for ground transport" (market dynamics)
 
-**REJECT - Localized Obstacles (These Don't Matter):**
-- ❌ "Oregon refinery delayed by federal permits" (one company's problem, no market entry)
-- ❌ "Competitor facility blocked by lawsuit" (legal issue, not market intelligence)
-- ❌ "Construction timeline pushed to 2027 for XYZ plant" (individual project delay)
-
-**The Test from Tim's Transcripts:**
-
-> "It's an American one... it's just ongoing stuff that has NO RELEVANCE to us whatsoever... nothing we could glean from it, really... it wasn't news about a development, it wasn't something that was really specific." - Tim on Oregon refinery rejection
+**REJECT — Localized Obstacles:**
+- ❌ "Oregon refinery delayed by federal permits" (one company's problem)
+- ❌ "Competitor facility blocked by lawsuit" (no market impact)
 
 **Ask**: "Does this affect Syntech's business or just the company mentioned?"
-- One company's problems ≠ Syntech's problem → REJECT
-- Market-wide forces = Syntech's problem → PASS
-
-**If localized obstacles only → REJECT**
 
 ---
 
 ### A3: PATHWAY A VALUE SCORING
 
-**If article passes substance gate, award points for ALL components that apply:**
-
----
+**Award points for ALL components that apply:**
 
 #### VALUE CHECK 1: OPERATIONAL DEPLOYMENT (0 or 3 points)
 
-**Criteria**: Specific deployment with concrete proof of biofuel use
-
-**Awards 3 points if article shows:**
+**Awards 3 points if:**
 - WHO: Named company/fleet/facility/event
-- WHAT: Specific fuel type + application  
+- WHAT: Specific fuel type + application
 - HOW MUCH: Volume/scale/investment with numbers
 - WHEN: Timeline or operational status (not "plans to")
 
 **Examples scoring 3 points:**
 - ✅ "WOMADelaide powers all stages with B100/HVO from UCO" (WHO: festival, WHAT: B100/HVO, HOW MUCH: all stages, WHEN: 2026)
-- ✅ "UECC uses 8,990 tonnes UCOME for Toyota shipments" (WHO: UECC, WHAT: UCOME, HOW MUCH: 8,990 tonnes, WHEN: 2024-2025)
-- ✅ "Restaurant Technologies recycled 390M lbs UCO, ISCC certified" (WHO: RT, WHAT: UCO collection, HOW MUCH: 390M lbs, WHEN: 2025)
-- ✅ "Cotswold Council deploys 30 HVO lorries, £7.8M investment" (WHO: Council, WHAT: HVO, HOW MUCH: 30 vehicles + £7.8M, WHEN: operational)
-
-**Examples scoring 0 points:**
-- ❌ "Council plans to explore biofuel options" (plans, not deployment)
-- ❌ "Facility announced with timeline TBD" (announcement, not operational)
-- ❌ "Company considering B100 for future fleet" (aspirational, not deployed)
-
-**Why this matters (Tim's words):**
-> "If someone's doing something somewhere else that we're not aware of, we'd like to know... people are pushing it now" - Tim on festival B100 adoption
+- ✅ "UECC uses 8,990 tonnes UCOME for Toyota shipments"
+- ✅ "Cotswold Council deploys 30 HVO lorries, £7.8M investment"
 
 ---
 
 #### VALUE CHECK 2: TECHNOLOGY VALIDATION (0 or 3 points)
 
-**Criteria**: Proves waste-derived biodiesel works with QUANTIFIED benefits
-
 **Awards 3 points for EITHER:**
 
 **A) Quantified Performance Proof:**
 - Specific emissions: "81% black carbon reduction", "90% CO2 vs diesel"
-- Operational metrics: "500,000 km testing", "162M lbs CO2 prevented annually"  
-- Verified commercial results (not lab tests)
+- Operational metrics: "500,000 km testing", "162M lbs CO2 prevented annually"
 - Must include NUMBERS proving fuel works
 
 **B) OEM Approvals/Certifications:**
-- Manufacturer approves biodiesel: "John Deere certifies B30 across Tier 4"
-- Technology certification: "Scania validates HVO for entire truck line"
-- Market expansion: "JCB announces all equipment HVO-compatible"
-- Industry training: "Lloyd's Register launches FAME handling course"
+- Manufacturer approves biodiesel: Scania, Volvo, Mercedes, DAF, Iveco, MAN, Daimler, Caterpillar, John Deere, Komatsu, Volvo CE, Liebherr, JCB, New Holland, Case, Massey Ferguson, Fendt, Kubota, Valtra, Claas, Deutz-Fahr, McCormick
+- Technology certification for B100/HVO/FAME
+- Industry training on biofuel handling
 
-**Examples scoring 3 points:**
-- ✅ "Marine vessel achieves 81% black carbon reduction on B100" (quantified proof, even wrong sector)
-- ✅ "Festival achieves 90% GHG reduction with B100/HVO" (quantified benefit)
-- ✅ "John Deere approves B30 across entire Tier 4 engine portfolio" (OEM validation)
-- ✅ "R.W. Beckett certifies burners for B100 home heating" (OEM certification expanding market)
-- ✅ "Hydrogen tugboat completes zero-carbon voyage using B100" (operational validation)
-
-**Examples scoring 0 points:**
-- ❌ "Promising pilot results" (vague, no numbers)
-- ❌ "Technology shows potential" (aspirational, not proven)
-- ❌ "Initial tests encouraging" (no quantified proof)
-
-**Why this matters (Tim's words):**
-> "The interesting thing about this is... it's reporting about the reduction in particles... it proves that it is 81%... **strong evidence that what we're doing matters**... even though we're not into marine." - Tim on marine B100
-
-**Context doesn't matter if PROOF exists.** Marine, aviation, festivals - all valid if they prove the fuel works.
+**Context doesn't matter if PROOF exists** — marine, aviation, festivals all valid.
 
 ---
 
 #### VALUE CHECK 3: SALES OPPORTUNITY SIGNAL (0 or 3 points)
 
-**Criteria**: Indicates potential Syntech customers or market opportunities
-
 **Awards 3 points if article discusses:**
 
-**Infrastructure/Construction (Future Opportunities):**
 - UK construction/infrastructure projects announced (not completed)
-- Major projects needing fuel for equipment/generators/off-grid power
-- Government procurement with decarbonization requirements
-- Capital investment in fuel-consuming sectors
-
-**Funding Signals:**
-- Budget allocations for construction/infrastructure/transport (with £/$amounts)
-- Tender requirements including emissions reduction
-- Capital expenditure announcements for fuel-heavy sectors
-
-**Sector Commitments:**
-- Construction/logistics decarbonization pledges with timelines
+- Government procurement with decarbonisation requirements
+- Budget allocations for construction/infrastructure/transport (with £/$ amounts)
+- Construction/logistics decarbonisation pledges with timelines
 - Corporate net-zero commitments in Syntech's target sectors
-- Scope 3 reduction programs requiring fuel solutions
 
 **Examples scoring 3 points:**
-- ✅ "£3.3bn infrastructure budget including transport schemes" (future fuel demand)
-- ✅ "Council tender requires net-zero fuel supplier by 2026" (procurement opportunity)
-- ✅ "Construction sector commits to 50% emissions reduction" (market driver)
-- ✅ "SSE announces decarbonization plan for equipment fleet" (strategic customer opportunity)
-
-**Examples scoring 0 points:**
-- ❌ "Market expected to grow" (generic, no specific opportunities)
-- ❌ "Council switched to HVO last year" (already deployed, not future opportunity)
-- ❌ "Industry discusses sustainability goals" (aspirational, no concrete commitments)
+- ✅ "£3.3bn infrastructure budget including transport schemes"
+- ✅ "Council tender requires net-zero fuel supplier by 2026"
+- ✅ "SSE announces decarbonisation plan for equipment fleet"
 
 ---
 
 #### VALUE CHECK 4: MARKET INTELLIGENCE (0 or 2 points)
 
-**Criteria**: Actionable market information affecting business decisions
-
 **Awards 2 points for:**
 
-**Supply Chain Intelligence:**
 - UCO pricing trends: "UCO prices surge 40% on SAF demand"
 - Feedstock availability: "China UCO supply impacts European market"
-- Collection developments: "Restaurant Technologies recycled 390M lbs UCO"
-
-**Regulatory Intelligence:**
-- RTFO mandate changes affecting waste-derived fuels
-- Carbon pricing impacts on biofuel economics
-- Policy shifts creating opportunities or challenges
-
-**Market Forecasts (MUST BE SPECIFIC):**
-- ✅ "EIA: RD production 250K→290K bpd by 2027" (specific forecast)
-- ✅ "Swedish RD demand hits record high, prices up 15%" (market trend + data)
-- ❌ "Biofuel market expected to grow" (generic, no actionable data)
-
-**Competitive Intelligence (MUST BE ACTIONABLE):**
-- ✅ Competitor facility GOES OPERATIONAL with capacity (affects market supply)
-- ✅ Daekyung O&T acquisition: Korea's No.1 UCO supplier sold for 500B won (consolidation signal)
-- ✅ Competitor adopts novel process Syntech can learn from
-- ❌ Competitor achieves routine ISCC certification (standard compliance, not novel)
-- ❌ Competitor facility delayed/blocked (no market impact yet)
-
-**Demand Trends (MUST HAVE DATA):**
-- Biofuel adoption rates with specific numbers
-- Geographic market developments with metrics
-- Downstream forces: "SAF demand affects UCO availability for ground transport"
-
-**Examples scoring 2 points:**
-- ✅ "EIA: RD production 250K→290K bpd, biodiesel flat at 100K bpd" (market forecast)
-- ✅ "UCO CIF ARA gains, vegoil-gasoil spreads mixed" (feedstock pricing)
-- ✅ "Daekyung O&T acquisition: 500B won for Korea's top UCO supplier" (competitive M&A)
-- ✅ "POME-UCO RD spread hits highs amid policy changes" (feedstock economics)
-
-**Examples scoring 0 points:**
-- ❌ "Competitor achieves ISCC certification" (routine compliance)
-- ❌ "Oregon refinery delayed by permits" (localized obstacle, no market entry)
-- ❌ "Market shows strong growth potential" (generic, no data)
+- RTFO mandate changes or carbon pricing impacts
+- Specific market forecasts with data
+- Competitive Intelligence (MUST BE ACTIONABLE):
+  - ✅ Competitor facility GOES OPERATIONAL with capacity
+  - ✅ Major competitor acquisition or consolidation signal
+  - ❌ Competitor achieves routine ISCC certification
+  - ❌ Competitor facility delayed/blocked
 
 ---
 
 #### VALUE CHECK 5: OEM BREAKTHROUGH (0 or 2 points)
 
-**Criteria**: Equipment manufacturer validation or certification
-
 **Awards 2 points for:**
-
-**OEM Approvals:**
-- Major manufacturer approves biodiesel: Caterpillar, Volvo, JCB, Scania, John Deere, DAF, MAN
-- Engine line certification for B100/HVO/FAME
-- Industry standard validation (BS EN 14214, ASTM D6751) from OEM
-
-**Technology Milestones:**
+- Major manufacturer approves biodiesel across engine/equipment line
 - First-of-kind commercial adoption with manufacturer backing
-- Breakthrough in biofuel performance/compatibility
 - Major fleet operator validation (100+ vehicles) with OEM partnership
-
-**Examples scoring 2 points:**
-- ✅ "John Deere approves B30 across entire Tier 4 engine line"
-- ✅ "JCB announces all equipment HVO-compatible as standard"
-- ✅ "R.W. Beckett certifies burners for B100 home heating"
-- ✅ "Scania validates HVO for complete truck portfolio"
-
-**Why this matters:**
-OEM validation is valuable BY ITSELF - it expands Syntech's addressable market and validates the technology, even without specific deployment metrics.
 
 ---
 
 #### VALUE CHECK 6: STRATEGIC RELEVANCE TO SYNTECH (0 or 1 point)
 
-**Criteria**: Direct alignment with Syntech's business model
-
 **Awards 1 point for:**
-
-**Target Sector Focus:**
 - UK construction/logistics/infrastructure deployment
-- Off-grid power, generators, NRMM applications
-- Municipal fleets, waste collection vehicles
-
-**Feedstock/Process:**
 - Waste feedstock emphasis (UCO collection, circular economy)
-- Transesterification process (FAME production)
-- UK waste sourcing (not imported)
-
-**Value Proposition:**
-- Drop-in fuel messaging (no modifications required)
-- Scope 3 emissions reduction focus
+- Drop-in fuel messaging, Scope 3 focus
 - BS EN 14214 standard mentioned
-- "Made in Britain" / local production emphasis
-
-**Examples scoring 1 point:**
-- ✅ "UK festival uses B100 from UCO for off-grid power"
-- ✅ "New UCO collection network expands across Scotland"
-- ✅ "Municipal fleet targets Scope 3 reduction through drop-in biofuel"
-- ✅ "Construction equipment using FAME compliant with BS EN 14214"
+- Off-grid power, generators, NRMM applications
 
 ---
 
@@ -9555,69 +9515,53 @@ Maximum: 16 points
 
 ## PATHWAY B: VIP STRATEGIC EVALUATION
 
-**This pathway is for VIP entity articles WITHOUT explicit biofuel discussion.**
+**For VIP entity articles WITHOUT explicit biofuel discussion.**
 
-**Why this pathway exists:**
-VIP entities (Lower Thames Crossing, Balfour Beatty, SSE, etc.) are Syntech's strategic customers. Infrastructure spending = fuel demand for equipment/generators. Decarbonization commitments = future biofuel opportunities.
-
-**Lower substance bar:**
-These articles don't need:
-- Biofuel keywords (that would be Pathway A)
-- Operational deployment metrics
-- Technology validation proof
-
-They just need to signal **sales opportunity or strategic intelligence**.
-
----
+**Includes LinkedIn / Customer sources** — all their content routes here automatically.
 
 ### B1: VIP CONFIRMATION
 
 \`\`\`
-Does article discuss VIP entity?
-├─ YES (LTC, Balfour Beatty, SSE, NetZero Teesside, Sizewell C) → CONTINUE
-└─ NO → ERROR (should not be in Pathway B)
+Does article discuss a VIP entity?
+├─ YES → CONTINUE
+└─ NO (LinkedIn / Customer auto-routed) → CONTINUE with context available
 \`\`\`
+
+**VIP Entities:**
+- Balfour Beatty, SSE, Lower Thames Crossing, NetZero Teesside, Sizewell C, Sizewell C Consortium
+- National Highways, Highland Fuels, Falkirk Council, A9 Duelling, Highland Council
+- Transport for London, TFL, Sunbelt Rentals
 
 ---
 
-### B2: VIP SUBSTANCE CHECK (Simpler than Pathway A)
+### B2: VIP SUBSTANCE CHECK
 
 **Article must have ONE of these:**
-
-**Infrastructure/Project Intelligence:**
 - Project timelines, scale, investment amounts
 - Construction contracts awarded
-- Facility developments or expansions
-
-**Financial Intelligence:**
 - Budget allocations for infrastructure/construction
-- Capital expenditure announcements
-- Procurement budgets
-
-**Strategic Commitments:**
-- Decarbonization pledges with timelines
+- Decarbonisation pledges with timelines
 - Net-zero commitments for operations/fleets
-- Sustainability targets
 
-**If article has NONE of these → REJECT** (just company news with no strategic value)
+**If article has NONE of these AND is not a LinkedIn / Customer source → REJECT**
+
+**LinkedIn / Customer sources:** Apply permissive bias — surface unless content is entirely personal/unrelated to business activities.
 
 ---
 
 ### B3: PATHWAY B VALUE SCORING
-
-**Award points for ALL that apply:**
 
 #### VALUE CHECK 1: PROJECT SCALE (0 or 5 points)
 
 **Awards 5 points if:**
 - Major infrastructure project: £500M+ value
 - Multi-year timeline (2+ years of fuel demand)
-- Significant construction activity (equipment/generator fuel needs)
+- Significant construction activity
 
 **Examples scoring 5 points:**
 - ✅ "£10.2bn Lower Thames Crossing construction starts 2026"
-- ✅ "£1.7bn A5 Western Transport Corridor begins early 2026"
 - ✅ "Balfour Beatty wins £800M highway contract"
+- ✅ "Sunbelt Rentals expands UK fleet with £200M equipment investment"
 
 ---
 
@@ -9628,24 +9572,14 @@ Does article discuss VIP entity?
 - Immediate procurement opportunities
 - Clear timeline for fuel demand
 
-**Examples scoring 3 points:**
-- ✅ "LTC construction begins summer 2026"
-- ✅ "Tender released with Q1 2026 decision date"
-- ✅ "Project commences imminently"
-
 ---
 
-#### VALUE CHECK 3: DECARBONIZATION COMMITMENT (0 or 3 points)
+#### VALUE CHECK 3: DECARBONISATION COMMITMENT (0 or 3 points)
 
 **Awards 3 points if:**
 - VIP entity commits to emissions reduction
 - Net-zero targets for operations/fleets
 - Sustainability requirements in procurement
-
-**Examples scoring 3 points:**
-- ✅ "SSE commits to net-zero construction fleet by 2028"
-- ✅ "Project requires 50% emissions reduction vs baseline"
-- ✅ "Council mandates sustainable fuel suppliers"
 
 ---
 
@@ -9663,7 +9597,7 @@ Does article discuss VIP entity?
 \`\`\`
 PATHWAY B SCORE = Project Scale (0 or 5)
                 + Timeline/Urgency (0 or 3)
-                + Decarbonization Commitment (0 or 3)
+                + Decarbonisation Commitment (0 or 3)
                 + Strategic Positioning (0 or 2)
 
 Maximum: 13 points
@@ -9673,43 +9607,23 @@ Maximum: 13 points
 
 ## PATHWAY C: REGULATORY/MARKET EVALUATION
 
-**This pathway is for policy/regulation articles creating biofuel opportunities.**
-
-**Why this pathway exists:**
-Policy creates market conditions. Budget allocations, procurement mandates, energy policy - these signal future demand even without saying "biofuel."
-
----
+**For policy/regulation articles creating biofuel opportunities.**
 
 ### C1: REGULATORY CONFIRMATION
 
-\`\`\`
-Does article discuss policy/regulation affecting fuel markets?
-├─ YES (budget, mandates, procurement rules) → CONTINUE
-└─ NO → ERROR (should not be in Pathway C)
-\`\`\`
-
----
-
-### C2: PATHWAY C SUBSTANCE CHECK
-
 **Article must have:**
-
-**Policy/Regulatory Change:**
 - Government budget allocations
 - New mandates or standards
 - Procurement rule changes
 - Energy/transport policy shifts
 
-**Market Impact:**
-- Clear connection to fuel demand
-- Implications for low-carbon fuels
-- Infrastructure/transport sector effects
+**Plus clear connection to fuel demand.**
 
 **If article has generic policy discussion with no market impact → REJECT**
 
 ---
 
-### C3: PATHWAY C VALUE SCORING
+### C2: PATHWAY C VALUE SCORING
 
 #### VALUE CHECK 1: POLICY SCALE (0 or 5 points)
 
@@ -9717,11 +9631,6 @@ Does article discuss policy/regulation affecting fuel markets?
 - National-level policy (UK-wide)
 - Significant budget: £1bn+ allocated
 - Multi-sector impact
-
-**Examples scoring 5 points:**
-- ✅ "UK budget: £3.3bn capital expenditure for infrastructure/transport"
-- ✅ "Government mandates 50% emissions reduction in public procurement"
-- ✅ "RTFO increases renewable fuel mandate to 15% by 2027"
 
 ---
 
@@ -9768,8 +9677,6 @@ Maximum: 13 points
 ## FINAL DECISION
 
 \`\`\`
-Calculate total score based on pathway
-
 IF score ≥ 3 → SURFACE TO CLIENT
 IF score < 3 → REJECT
 \`\`\`
@@ -9778,7 +9685,7 @@ IF score < 3 → REJECT
 - **10+ points**: MUST-READ (exceptional strategic value)
 - **6-9 points**: STRONG INTEREST (clear relevance)
 - **3-5 points**: MARGINAL (review, borderline value)
-- **<3 points**: REJECT (insufficient value)
+- **<3 points**: REJECT
 
 ---
 
@@ -9786,17 +9693,21 @@ IF score < 3 → REJECT
 
 **CRITICAL: Do NOT calculate total_score, decision, or priority_band. These will be calculated by the code node.**
 
-**Output ONLY these fields:**
-
 \`\`\`json
 {
-  "pathway": "A",
-  
+  "pathway": "A" | "B" | "C",
+
+  "competitor_intel": {
+    "is_competitor": true | false,
+    "competitor_name": "Olleco" | "Argent Energy" | "Greenergy" | "Advanced Biofuel Solutions" | "Harvest Energy" | "Vivergo" | "Bio UK" | "Brocklesby" | "Arrow Oils" | "Pure Fuels" | "Ennover" | "Crown Oil" | "New Era Energy" | "BWOC" | "Silvey Fleet" | null,
+    "note": "Intel Only — internal monitoring, not for publishing"
+  },
+
   "scoring_breakdown": {
     "pathway_a": {
       "fuel_type_gate": {
-        "points": 2, 
-        "passed": true, 
+        "points": 0,
+        "passed": true,
         "evidence": "Waste-derived biodiesel from UCO"
       },
       "substance_gate": {
@@ -9805,72 +9716,30 @@ IF score < 3 → REJECT
         "measurable_data": "90% GHG reduction achieved",
         "proof_progress": "Operational deployment at scale"
       },
-      "operational_deployment": {
-        "points": 3, 
-        "evidence": "Named entity deployed specific fuel with quantified scale"
-      },
-      "technology_validation": {
-        "points": 3, 
-        "evidence": "81% black carbon reduction proven in marine application"
-      },
-      "sales_opportunity": {
-        "points": 0, 
-        "evidence": null
-      },
-      "market_intelligence": {
-        "points": 2, 
-        "evidence": "UCO pricing trends indicate supply constraints"
-      },
-      "oem_breakthrough": {
-        "points": 0, 
-        "evidence": null
-      },
-      "strategic_relevance": {
-        "points": 1, 
-        "evidence": "UK construction sector, waste feedstock"
-      }
+      "operational_deployment": { "points": 0, "evidence": null },
+      "technology_validation": { "points": 0, "evidence": null },
+      "sales_opportunity": { "points": 0, "evidence": null },
+      "market_intelligence": { "points": 0, "evidence": null },
+      "oem_breakthrough": { "points": 0, "evidence": null },
+      "strategic_relevance": { "points": 0, "evidence": null }
     },
-    
+
     "pathway_b": {
-      "vip_confirmation": "Lower Thames Crossing",
-      "project_scale": {
-        "points": 5, 
-        "evidence": "£10.2bn infrastructure project starting 2026"
-      },
-      "timeline_urgency": {
-        "points": 3, 
-        "evidence": "Construction commences Q2 2026"
-      },
-      "decarbonization_commitment": {
-        "points": 0, 
-        "evidence": null
-      },
-      "strategic_positioning": {
-        "points": 2, 
-        "evidence": "Multiple VIP entities involved"
-      }
+      "vip_confirmation": "Entity name or null",
+      "project_scale": { "points": 0, "evidence": null },
+      "timeline_urgency": { "points": 0, "evidence": null },
+      "decarbonization_commitment": { "points": 0, "evidence": null },
+      "strategic_positioning": { "points": 0, "evidence": null }
     },
-    
+
     "pathway_c": {
-      "policy_scale": {
-        "points": 5, 
-        "evidence": "£3.3bn national infrastructure budget allocation"
-      },
-      "timeline_implementation": {
-        "points": 3, 
-        "evidence": "Policy effective from April 2026"
-      },
-      "syntech_alignment": {
-        "points": 3, 
-        "evidence": "Targets waste-derived fuels in construction sector"
-      },
-      "market_opportunity": {
-        "points": 2, 
-        "evidence": "Opens public procurement to biofuel suppliers"
-      }
+      "policy_scale": { "points": 0, "evidence": null },
+      "timeline_implementation": { "points": 0, "evidence": null },
+      "syntech_alignment": { "points": 0, "evidence": null },
+      "market_opportunity": { "points": 0, "evidence": null }
     }
   },
-  
+
   "strategic_summary": "One to two sentence summary of strategic value to Syntech",
   "key_highlights": [
     "First major highlight with specific detail",
@@ -9889,43 +9758,117 @@ IF score < 3 → REJECT
 
 ---
 
-## CRITICAL REMINDERS - TIM'S THINKING
+## CRITICAL REMINDERS — TIM'S THINKING
 
-**From Transcripts:**
+1. **Context doesn't matter if PROOF exists** — "Strong evidence that what we're doing matters... even though we're not into marine"
+2. **"We know that anyway" = reject** — novel intelligence only
+3. **Obstacles only matter if market-wide** — one company's problems ≠ Syntech's problems
+4. **Adoption signals matter** — "If someone's doing something we're not aware of, we'd like to know"
+5. **OEM approvals = market expansion** — don't need deployment metrics to be valuable
+6. **VIP infrastructure = fuel demand** — £10bn construction project = equipment needs fuel
+7. **Competitor LinkedIn = permissive** — surface competitor content, flag as intel`,
+                },
+            ],
+        },
+        batching: {
+            batchSize: 5,
+            delayBetweenBatches: 10000,
+        },
+    };
 
-1. **Context doesn't matter if PROOF exists**
-   - "Strong evidence that what we're doing matters... even though we're not into marine"
-   - Festival, maritime, aviation, hydrogen+B100 - all prove the fuel works
+    @node({
+        id: 'e8a4c711-1d3f-4e72-b7a1-9c2b5e18a4d2',
+        name: '🎓 STAGE - 4B: Expert Content Processor',
+        type: '@n8n/n8n-nodes-langchain.chainLlm',
+        version: 1.9,
+        position: [6912, 4928],
+    })
+    Stage4bExpertContentProcessor = {
+        promptType: '=define',
+        text: `=Process this expert content:
 
-2. **"We know that anyway" = reject**
-   - Generic info easily found via Google has no value
-   - Novel intelligence only
+ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
+ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
+SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
-3. **Obstacles only matter if market-wide**
-   - "It's just ongoing stuff that has no relevance to us whatsoever"
-   - One company's problems ≠ Syntech's problems
+PREVIOUS STAGE OUTPUTS:
 
-4. **Adoption signals matter**
-   - "If someone's doing something we're not aware of, we'd like to know"
-   - New applications, unexpected sectors using biofuel
+Stage 1: {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output?.toJsonString() }}
+Stage 2: {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output?.toJsonString() }}`,
+        hasOutputParser: true,
+        needsFallback: true,
+        messages: {
+            messageValues: [
+                {
+                    message: `=# STAGE 4B: EXPERT THOUGHT LEADERSHIP PROCESSOR
 
-5. **OEM approvals = market expansion**
-   - Don't need deployment metrics to be valuable
-   - Opens addressable market
+**Purpose**: Process expert LinkedIn content for the Expert vertical. Extract, summarise, and tag. No scoring or filtering required.
+**Decision**: Always SURFACE
+**Token Budget**: 100 tokens
+**Handles**: Pathway D only
 
-6. **UCO intelligence valuable everywhere**
-   - Even in wrong sectors if it shows feedstock dynamics
-   - Supply, pricing, collection all matter
+---
 
-7. **Paywalled headlines count**
-   - If headline has specifics, substance exists
-   - "Swedish RD demand record high" = actionable
+## SYSTEM MESSAGE
 
-8. **VIP infrastructure = fuel demand**
-   - £10bn construction project = equipment needs fuel
-   - Don't need "biofuel" mentioned
+### CORE UNDERSTANDING
 
-**Philosophy**: Think like Tim - "Does this help us make better business decisions, or is it just nice to know?"`,
+This stage handles content from expert thought leaders — climate scientists, researchers, academics, and sustainability advocates. Their content is intentionally broader than biofuels and will often cover:
+
+- Climate science and research findings
+- Decarbonisation policy and opinion
+- Environmental impact reporting
+- Energy transition commentary
+- Academic papers and reports
+- Personal insights from recognised experts
+
+**Do not apply biofuel scoring criteria.** Tim's instruction is to surface all expert content for review. Your job is to extract, summarise, and tag — not to score or filter.
+
+**There is no reject threshold for this stage. All content surfaces.**
+
+---
+
+### TASK
+
+For each article or post:
+
+1. **Extract the core topic** — what is this person talking about?
+2. **Identify the content type** — research paper, opinion piece, news commentary, personal update, industry announcement, or other
+3. **Note any Syntech relevance** — does it touch on biofuels, UCO, biodiesel, decarbonisation, or Syntech's target sectors, even indirectly? If not, null is fine.
+4. **Extract key highlights** — up to three notable points from the content
+5. **Tag the Expert vertical**
+
+---
+
+### OUTPUT FORMAT
+
+\`\`\`json
+{
+  "pathway": "D",
+  "decision": "SURFACE",
+  "vertical": "Expert",
+  "content_type": "research_paper" | "opinion_piece" | "news_commentary" | "industry_announcement" | "personal_update" | "other",
+  "topic_summary": "One sentence describing what this content is about",
+  "syntech_relevance": "Brief note on any connection to biofuels, decarbonisation, or Syntech's sectors — or null if none",
+  "key_highlights": [
+    "First notable point from the content",
+    "Second notable point if present",
+    "Third notable point if present"
+  ]
+}
+\`\`\`
+
+---
+
+### CRITICAL REMINDERS
+
+1. **Always SURFACE** — there is no reject threshold for expert content
+2. **Never score** — this is not a biofuel relevance scoring exercise
+3. **Keep topic_summary concise** — one sentence only
+4. **Syntech relevance is optional** — null is perfectly fine if there is no connection
+5. **key_highlights** — extract what is actually notable, do not invent points if the content is sparse`,
                 },
             ],
         },
@@ -10255,7 +10198,7 @@ This add default content and image types to each article
         name: 'OpenAI Chat Model3',
         type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
         version: 1.3,
-        position: [7008, 5536],
+        position: [6992, 5536],
         credentials: { openAiApi: { id: 'NoEKitspBJb0zQrp', name: 'Syntech GM OpenAi account' } },
     })
     OpenaiChatModel3 = {
@@ -10266,6 +10209,76 @@ This add default content and image types to each article
             cachedResultName: 'gpt-5.2',
         },
         builtInTools: {},
+        options: {
+            temperature: 0,
+        },
+    };
+
+    @node({
+        id: '7a1a06b9-d040-412f-9e90-8268a8b72ca9',
+        name: 'Anthropic Chat Model1',
+        type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
+        version: 1.3,
+        position: [7216, 5264],
+        credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
+    })
+    AnthropicChatModel1 = {
+        model: {
+            __rl: true,
+            value: 'claude-sonnet-4-5-20250929',
+            mode: 'list',
+            cachedResultName: 'Claude Sonnet 4.5',
+        },
+        options: {
+            temperature: 0,
+        },
+    };
+
+    @node({
+        id: 'ddd5c731-c662-4980-96c1-c61b0fe83482',
+        name: 'OpenAI Chat Model4',
+        type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+        version: 1.3,
+        position: [6960, 5168],
+        credentials: { openAiApi: { id: 'NoEKitspBJb0zQrp', name: 'Syntech GM OpenAi account' } },
+    })
+    OpenaiChatModel4 = {
+        model: {
+            __rl: true,
+            value: 'gpt-5.2',
+            mode: 'list',
+            cachedResultName: 'gpt-5.2',
+        },
+        builtInTools: {},
+        options: {
+            temperature: 0,
+        },
+    };
+
+    @node({
+        id: '69e439cd-9b03-4aa7-a4a8-4719c862a269',
+        name: 'No Operation, do nothing1',
+        type: 'n8n-nodes-base.noOp',
+        version: 1,
+        position: [6656, 4816],
+    })
+    NoOperationDoNothing1 = {};
+
+    @node({
+        id: '2182408a-3e3b-4aa5-b6e6-488a65ed2c0c',
+        name: 'Sonnet 4.5 T0.',
+        type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
+        version: 1.3,
+        position: [6816, 5168],
+        credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
+    })
+    Sonnet45T0 = {
+        model: {
+            __rl: true,
+            value: 'claude-sonnet-4-5-20250929',
+            mode: 'list',
+            cachedResultName: 'Claude Sonnet 4.5',
+        },
         options: {
             temperature: 0,
         },
@@ -10381,14 +10394,17 @@ This add default content and image types to each article
         this.AddContentWithoutDate1.out(1).to(this.SendAMessage4.in(0));
         this.SendAMessage6.out(0).to(this.LoopOverItems.in(0));
         this.KeepBiofuelContent1.out(0).to(this.Stage2VipKeywordHandler.in(0));
-        this.KeepKeywordDenseContent1.out(0).to(this.Merge2.in(0));
         this.SendAMessage2.out(0).to(this.LoopOverItems.in(0));
         this.Get100BestArticles.out(0).to(this.Evaluation.in(0));
         this.CallSearchGoogleSyntech.out(0).to(this.Merge.in(4));
-        this.Merge2.out(0).to(this.Stage4ClassificationAgentClaudeOptimisation.in(0));
+        this.Merge2.out(0).to(this.Stage4aStrategicValueScorer.in(0));
         this.PerformFinalCalculation.out(0).to(this.ThresholdMet.in(0));
         this.Limit16Items.out(0).to(this.CallSearchGoogleSyntech.in(0));
-        this.ViewDensityResults.out(0).to(this.KeepKeywordDenseContent1.in(0));
+        this.ViewDensityResults.out(0).to(this.PathwayRouter.in(0));
+        this.PathwayRouter.out(0).to(this.NoOperationDoNothing1.in(0));
+        this.PathwayRouter.out(1).to(this.Stage4bExpertContentProcessor.in(0));
+        this.PathwayRouter.out(2).to(this.Merge2.in(0));
+        this.Stage4bExpertContentProcessor.out(0).to(this.MergeStage4.in(1));
         this.ViewVipResults.out(0).to(this.Merge2.in(1));
         this.Stage1FossilFuelFilter.out(0).to(this.KeepBiofuelContent1.in(0));
         this.Stage2VipKeywordHandler.out(0).to(this.IfVipArticle.in(0));
@@ -10400,7 +10416,8 @@ This add default content and image types to each article
         this.MapDataForNotion2.out(0).to(this.MapDataForNotion3.in(0));
         this.MapDataForNotion3.out(0).to(this.AddContentWithDate2.in(0));
         this.AddContentWithDate2.out(0).to(this.AddContentWithDate3.in(0));
-        this.Stage4ClassificationAgentClaudeOptimisation.out(0).to(this.PerformFinalCalculation.in(0));
+        this.Stage4aStrategicValueScorer.out(0).to(this.MergeStage4.in(0));
+        this.MergeStage4.out(0).to(this.PerformFinalCalculation.in(0));
         this.Aggregate.out(0).to(this.SemanticKeywordDeduplication.in(0));
         this.SemanticKeywordDeduplication.out(0).to(this.DeduplicatedArticles.in(0));
         this.DeduplicatedArticles.out(0).to(this.Stage1FossilFuelFilter.in(0));
@@ -10428,24 +10445,31 @@ This add default content and image types to each article
         this.StructuredOutputParser2.uses({
             ai_languageModel: this.AnthropicChatModel.output,
         });
+        this.StructuredOutputParser27.uses({
+            ai_languageModel: this.AnthropicChatModel1.output,
+        });
         this.StructuredOutputParser.uses({
             ai_languageModel: this.AnthropicChatModel2.output,
         });
         this.Stage1FossilFuelFilter.uses({
-            ai_languageModel: this.OpenaiChatModel1.output,
+            ai_languageModel: this.AnthropicChatModel6.output,
             ai_outputParser: this.StructuredOutputParser24.output,
         });
         this.Stage2VipKeywordHandler.uses({
-            ai_languageModel: this.OpenaiChatModel.output,
+            ai_languageModel: this.AnthropicChatModel7.output,
             ai_outputParser: this.StructuredOutputParser.output,
         });
         this.Stage3TopicDensityTest.uses({
-            ai_languageModel: this.OpenaiChatModel2.output,
+            ai_languageModel: this.AnthropicChatModel8.output,
             ai_outputParser: this.StructuredOutputParser26.output,
         });
-        this.Stage4ClassificationAgentClaudeOptimisation.uses({
-            ai_languageModel: this.OpenaiChatModel3.output,
+        this.Stage4aStrategicValueScorer.uses({
+            ai_languageModel: this.Sonnet45T06.output,
             ai_outputParser: this.StructuredOutputParser2.output,
+        });
+        this.Stage4bExpertContentProcessor.uses({
+            ai_languageModel: this.Sonnet45T0.output,
+            ai_outputParser: this.StructuredOutputParser27.output,
         });
     }
 }
