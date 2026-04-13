@@ -29,7 +29,7 @@ This stage determines which TYPE of content this is. Tim values FOUR types of in
 1. **Pathway A** — Direct biofuel content (adoption, tech validation, market intel)
 2. **Pathway B** — VIP strategic intelligence (customer projects creating fuel demand)
 3. **Pathway C** — Regulatory/market forces (policy creating biofuel opportunities)
-4. **Pathway D** — Expert thought leadership (climate, decarbonisation, broader research)
+4. **Pathway D** — Expert thought leadership (LinkedIn Expert sources only)
 
 Each pathway is evaluated differently in Stage 4A or Stage 4B.
 
@@ -110,24 +110,14 @@ Check pathways in order.
 
 #### PATHWAY D: EXPERT THOUGHT LEADERSHIP
 
-**Route here if content is from an expert/thought leader OR covers broader climate, decarbonisation, or environmental research.**
+**Route here ONLY if source is LinkedIn / Expert. This pathway is not triggered by content.**
 
-**Auto-route:** LinkedIn / Expert → always PATHWAY D
-
-**Triggers (for non-LinkedIn sources):**
-- Climate science, research papers, academic findings
-- Decarbonisation policy opinion and analysis
-- Environmental impact reporting
-- Broader energy transition commentary
-- Content clearly from a recognised thought leader or research institution
+**Auto-route:** LinkedIn / Expert → always PATHWAY D, regardless of content
 
 **Examples that trigger Pathway D:**
-- ✅ "New paper: methane emissions 70% higher than reported" (LinkedIn / Expert)
-- ✅ "Why net zero policy timelines are misaligned with climate data" (LinkedIn / Expert)
-- ✅ "IPCC report findings on fossil fuel phase-out timelines"
-- ✅ "Academic study: UCO supply chains and circular economy benefits"
+- ✅ Any post from LinkedIn / Expert source
 
-**If expert/climate/research content with no biofuel/VIP/policy trigger → PATHWAY D**
+**Pathway D is never triggered by content analysis — only by the Step 0 source check.**
 
 ---
 
@@ -138,13 +128,13 @@ Check pathways in order.
 - No biofuel keywords AND
 - No VIP entities AND
 - No regulatory/policy fuel demand drivers AND
-- No expert/climate/research content AND
 - Generic news unrelated to Syntech's business
 
 **Examples to reject:**
-- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, policy, or expert)
+- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, or policy)
 - ❌ "New office development announced in Manchester" (generic construction)
 - ❌ "Electric vehicle charging infrastructure expands" (EVs, not biofuels)
+- ❌ "Global air travel demand to double by 2050" (no biofuel, VIP, or policy relevance)
 
 ---
 
@@ -167,10 +157,6 @@ Step 2: VIP entity or strategic infrastructure?
 
 Step 3: Regulatory/policy fuel demand drivers?
   ├─ YES → PATHWAY C
-  └─ NO → Step 4
-
-Step 4: Expert/climate/research content?
-  ├─ YES → PATHWAY D
   └─ NO → REJECT
 ```
 
@@ -334,11 +320,11 @@ Classify this article:
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
 
-Stage 1 Keywords: {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output.keywords_detected.join(", ") }}
+Stage 1 Keywords: {{ $('⛽️ STAGE - 1: Fossil Fuel Filter').item.json.output.biofuel_keywords_found.join(", ") }}
 Stage 2 VIP Status: {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output.decision }} - {{ $('🔑 STAGE - 2: VIP Keyword handler').item.json.output.reasoning }}
 ```

@@ -497,7 +497,7 @@ Score this article using your decision tree framework:
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
 SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
