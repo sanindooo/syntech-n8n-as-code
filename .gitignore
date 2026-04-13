@@ -22,3 +22,6 @@ todos/
 
 # n8n-as-code (contains API key)
 n8nac-config.json
+
+# Node dependencies (only used locally for type-checking workflow files)
+node_modules/

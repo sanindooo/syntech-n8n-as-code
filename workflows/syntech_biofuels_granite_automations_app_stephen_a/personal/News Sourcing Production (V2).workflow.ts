@@ -95,10 +95,10 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // AddContentWithoutDate1             httpRequest                [onError→out(1)] [creds]
 // SendAMessage5                      slack                      [creds]
 // SendAMessage6                      slack                      [creds]
-// Sonnet45T06                        lmChatAnthropic            [creds] [ai_languageModel]
-// AnthropicChatModel6                lmChatAnthropic            [creds] [ai_languageModel]
-// AnthropicChatModel7                lmChatAnthropic            [creds] [ai_languageModel]
-// AnthropicChatModel8                lmChatAnthropic            [creds] [ai_languageModel]
+// Sonnet45T06                        lmChatAnthropic            [creds]
+// AnthropicChatModel6                lmChatAnthropic            [creds]
+// AnthropicChatModel7                lmChatAnthropic            [creds]
+// AnthropicChatModel8                lmChatAnthropic            [creds]
 // KeepBiofuelContent1                filter
 // StickyNote13                       stickyNote
 // StickyNote14                       stickyNote
@@ -149,14 +149,14 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // ImageAndPlatformPrompts            merge
 // DefaultArticleOutputs              aggregate
 // StickyNote2                        stickyNote
-// OpenaiChatModel1                   lmChatOpenAi               [creds]
-// OpenaiChatModel                    lmChatOpenAi               [creds]
-// OpenaiChatModel2                   lmChatOpenAi               [creds]
-// OpenaiChatModel3                   lmChatOpenAi               [creds]
+// OpenaiChatModel1                   lmChatOpenAi               [creds] [ai_languageModel]
+// OpenaiChatModel                    lmChatOpenAi               [creds] [ai_languageModel]
+// OpenaiChatModel2                   lmChatOpenAi               [creds] [ai_languageModel]
+// OpenaiChatModel3                   lmChatOpenAi               [creds] [ai_languageModel]
 // AnthropicChatModel1                lmChatAnthropic            [creds] [ai_languageModel]
-// OpenaiChatModel4                   lmChatOpenAi               [creds]
+// OpenaiChatModel4                   lmChatOpenAi               [creds] [ai_languageModel]
 // NoOperationDoNothing1              noOp
-// Sonnet45T0                         lmChatAnthropic            [creds] [ai_languageModel]
+// Sonnet45T0                         lmChatAnthropic            [creds]
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                                            → ViewVipResults
 //                                              → Merge2.in(1)
 //                                                → Stage4aStrategicValueScorer
-//                                                  → MergeStage4
+//                                                  → MergeStage4.in(1)
 //                                                    → PerformFinalCalculation
 //                                                      → ThresholdMet
 //                                                        → Sort
@@ -256,7 +256,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                                                → PathwayRouter
 //                                                  → NoOperationDoNothing1
 //                                                 .out(1) → Stage4bExpertContentProcessor
-//                                                    → MergeStage4.in(1) (↩ loop)
+//                                                    → MergeStage4 (↩ loop)
 //                                                 .out(2) → Merge2 (↩ loop)
 //                        → RemoveDuplicates (↩ loop)
 //                → NoRssUrlAvailable
@@ -314,11 +314,11 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // StructuredOutputParser2.uses({ ai_languageModel: AnthropicChatModel })
 // StructuredOutputParser27.uses({ ai_languageModel: AnthropicChatModel1 })
 // StructuredOutputParser.uses({ ai_languageModel: AnthropicChatModel2 })
-// Stage1FossilFuelFilter.uses({ ai_languageModel: AnthropicChatModel6, ai_outputParser: StructuredOutputParser24 })
-// Stage2VipKeywordHandler.uses({ ai_languageModel: AnthropicChatModel7, ai_outputParser: StructuredOutputParser })
-// Stage3TopicDensityTest.uses({ ai_languageModel: AnthropicChatModel8, ai_outputParser: StructuredOutputParser26 })
-// Stage4aStrategicValueScorer.uses({ ai_languageModel: Sonnet45T06, ai_outputParser: StructuredOutputParser2 })
-// Stage4bExpertContentProcessor.uses({ ai_languageModel: Sonnet45T0, ai_outputParser: StructuredOutputParser27 })
+// Stage1FossilFuelFilter.uses({ ai_languageModel: OpenaiChatModel1, ai_outputParser: StructuredOutputParser24 })
+// Stage2VipKeywordHandler.uses({ ai_languageModel: OpenaiChatModel, ai_outputParser: StructuredOutputParser })
+// Stage3TopicDensityTest.uses({ ai_languageModel: OpenaiChatModel2, ai_outputParser: StructuredOutputParser26 })
+// Stage4aStrategicValueScorer.uses({ ai_languageModel: OpenaiChatModel3, ai_outputParser: StructuredOutputParser2 })
+// Stage4bExpertContentProcessor.uses({ ai_languageModel: OpenaiChatModel4, ai_outputParser: StructuredOutputParser27 })
 // </workflow-map>
 
 // =====================================================================
@@ -328,7 +328,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     id: 'UzEv74M2D2q4z0Zx',
     name: 'News Sourcing Production (V2)',
-    active: false,
+    active: true,
     tags: ['NEWS+'],
     settings: {
         executionOrder: 'v1',
@@ -739,7 +739,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Evaluation',
         type: 'n8n-nodes-base.evaluation',
         version: 4.7,
-        position: [8272, 5072],
+        position: [8656, 5072],
     })
     Evaluation = {
         operation: 'checkIfEvaluating',
@@ -751,7 +751,7 @@ export class NewsSourcingProductionV2Workflow {
         type: 'n8n-nodes-base.evaluationTrigger',
         version: 4.6,
         position: [3888, 5840],
-        credentials: { googleSheetsOAuth2Api: { id: 'KtxUrOdQhOl4VgmB', name: 'Google Sheets account 2' } },
+        credentials: { googleSheetsOAuth2Api: { id: 'OSB0yUnhxYm2AAN5', name: 'Stephen Google Sheets account' } },
     })
     RunEvaluation = {
         documentId: {
@@ -777,8 +777,8 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Set Output In Evaluation Google Sheet',
         type: 'n8n-nodes-base.evaluation',
         version: 4.7,
-        position: [8496, 4976],
-        credentials: { googleSheetsOAuth2Api: { id: 'KtxUrOdQhOl4VgmB', name: 'Google Sheets account 2' } },
+        position: [8880, 4976],
+        credentials: { googleSheetsOAuth2Api: { id: 'OSB0yUnhxYm2AAN5', name: 'Stephen Google Sheets account' } },
     })
     SetOutputInEvaluationGoogleSheet = {
         documentId: {
@@ -816,7 +816,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'If Publication Date',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [11584, 6048],
+        position: [11968, 6048],
     })
     IfPublicationDate = {
         conditions: {
@@ -847,7 +847,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'IF text longer than 2000 chars',
         type: 'n8n-nodes-base.if',
         version: 1,
-        position: [10688, 6064],
+        position: [11072, 6064],
     })
     IfTextLongerThan2000Chars = {
         conditions: {
@@ -866,7 +866,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Splits text in small chuncks',
         type: 'n8n-nodes-base.code',
         version: 2,
-        position: [11808, 5152],
+        position: [12192, 5152],
     })
     SplitsTextInSmallChuncks = {
         jsCode: `let result = [];
@@ -892,7 +892,7 @@ return result;`,
         name: 'IF2',
         type: 'n8n-nodes-base.if',
         version: 1,
-        position: [12032, 5152],
+        position: [12416, 5152],
     })
     If2 = {
         conditions: {
@@ -910,7 +910,7 @@ return result;`,
         name: 'Merge1',
         type: 'n8n-nodes-base.merge',
         version: 2.1,
-        position: [12928, 5248],
+        position: [13312, 5248],
     })
     Merge1 = {
         mode: 'combine',
@@ -923,7 +923,7 @@ return result;`,
         name: 'Loop Over Items',
         type: 'n8n-nodes-base.splitInBatches',
         version: 3,
-        position: [10912, 5728],
+        position: [11296, 5728],
     })
     LoopOverItems = {
         options: {},
@@ -934,7 +934,7 @@ return result;`,
         name: 'If Publication Date2',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [12256, 5088],
+        position: [12640, 5088],
     })
     IfPublicationDate2 = {
         conditions: {
@@ -965,7 +965,7 @@ return result;`,
         name: 'Set Article URL',
         type: 'n8n-nodes-base.set',
         version: 3.2,
-        position: [12704, 5088],
+        position: [13088, 5088],
     })
     SetArticleUrl = {
         fields: {
@@ -985,7 +985,7 @@ return result;`,
         name: 'Add Content To Post',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [13152, 5248],
+        position: [13536, 5248],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         onError: 'continueErrorOutput',
         retryOnFail: true,
@@ -1063,7 +1063,7 @@ return result;`,
         name: 'No Operation, do nothing',
         type: 'n8n-nodes-base.noOp',
         version: 1,
-        position: [11136, 5072],
+        position: [11520, 5072],
     })
     NoOperationDoNothing = {};
 
@@ -1127,7 +1127,7 @@ return result;`,
         name: 'select fields',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [8496, 5648],
+        position: [8880, 5648],
     })
     SelectFields = {
         assignments: {
@@ -1233,7 +1233,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Remove Duplicates1',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [9296, 5120],
+        position: [9680, 5120],
     })
     RemoveDuplicates1 = {
         mode: 'combine',
@@ -1256,7 +1256,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Set Google Sheet Fields',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [9072, 4960],
+        position: [9456, 4960],
     })
     SetGoogleSheetFields = {
         assignments: {
@@ -1295,8 +1295,8 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Get All Ideas From Evaluation Table2',
         type: 'n8n-nodes-base.googleSheets',
         version: 4.7,
-        position: [9072, 5152],
-        credentials: { googleSheetsOAuth2Api: { id: 'KtxUrOdQhOl4VgmB', name: 'Google Sheets account 2' } },
+        position: [9456, 5152],
+        credentials: { googleSheetsOAuth2Api: { id: 'OSB0yUnhxYm2AAN5', name: 'Stephen Google Sheets account' } },
         executeOnce: true,
     })
     GetAllIdeasFromEvaluationTable2 = {
@@ -1419,7 +1419,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'If From Form1',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [10240, 6064],
+        position: [10624, 6064],
     })
     IfFromForm1 = {
         conditions: {
@@ -1464,7 +1464,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Sort',
         type: 'n8n-nodes-base.sort',
         version: 1,
-        position: [7824, 5072],
+        position: [8208, 5072],
     })
     Sort = {
         sortFieldsUi: {
@@ -1483,7 +1483,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Valid content only (score above 2)',
         type: 'n8n-nodes-base.filter',
         version: 2.2,
-        position: [10464, 6176],
+        position: [10848, 6176],
     })
     ValidContentOnlyScoreAbove2 = {
         conditions: {
@@ -1549,7 +1549,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'filter',
         type: 'n8n-nodes-base.filter',
         version: 2.2,
-        position: [8784, 5120],
+        position: [9168, 5120],
     })
     Filter = {
         conditions: {
@@ -1582,8 +1582,8 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Add Content Idea to Evaluation Table1',
         type: 'n8n-nodes-base.googleSheets',
         version: 4.7,
-        position: [9520, 5120],
-        credentials: { googleSheetsOAuth2Api: { id: 'KtxUrOdQhOl4VgmB', name: 'Google Sheets account 2' } },
+        position: [9904, 5120],
+        credentials: { googleSheetsOAuth2Api: { id: 'OSB0yUnhxYm2AAN5', name: 'Stephen Google Sheets account' } },
     })
     AddContentIdeaToEvaluationTable1 = {
         operation: 'append',
@@ -1709,7 +1709,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'OpenAI Chat Model8',
         type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
         version: 1.2,
-        position: [8800, 4944],
+        position: [9184, 4944],
         credentials: { openAiApi: { id: 'NoEKitspBJb0zQrp', name: 'Syntech GM OpenAi account' } },
     })
     OpenaiChatModel8 = {
@@ -1726,7 +1726,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Evaluation1',
         type: 'n8n-nodes-base.evaluation',
         version: 4.8,
-        position: [8720, 4720],
+        position: [9104, 4720],
     })
     Evaluation1 = {
         operation: 'setMetrics',
@@ -1771,7 +1771,7 @@ Do not include any reasoning, explanation, or additional text.
         name: 'Filter Articles By Topic',
         type: 'n8n-nodes-base.executeWorkflow',
         version: 1.3,
-        position: [11136, 6224],
+        position: [11520, 6224],
         onError: 'continueErrorOutput',
     })
     FilterArticlesByTopic = {
@@ -1812,7 +1812,7 @@ Do not include any reasoning, explanation, or additional text.
         name: 'Filter Articles By Topic1',
         type: 'n8n-nodes-base.executeWorkflow',
         version: 1.3,
-        position: [11360, 5440],
+        position: [11744, 5440],
         onError: 'continueErrorOutput',
     })
     FilterArticlesByTopic1 = {
@@ -1872,8 +1872,8 @@ Do not include any reasoning, explanation, or additional text.
         onError: 'continueRegularOutput',
     })
     ScrapeAUrlAndGetItsContent3 = {
-        resource: 'Scraping',
         operation: 'scrape',
+        requestOptions: {},
     };
 
     @node({
@@ -2522,7 +2522,7 @@ Article page:
         name: 'Add Content With Date',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
-        position: [12480, 4944],
+        position: [12864, 4944],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         onError: 'continueErrorOutput',
     })
@@ -2750,7 +2750,7 @@ Article page:
         name: 'Add Content Without Date',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
-        position: [12480, 5232],
+        position: [12864, 5232],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         onError: 'continueErrorOutput',
     })
@@ -3003,7 +3003,7 @@ Article page:
         name: 'Map Data for Notion',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [11360, 6048],
+        position: [11744, 6048],
     })
     MapDataForNotion = {
         assignments: {
@@ -3217,7 +3217,7 @@ Article page:
         name: 'Map Data for Notion1',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [11584, 5152],
+        position: [11968, 5152],
     })
     MapDataForNotion1 = {
         assignments: {
@@ -3444,7 +3444,7 @@ Article page:
         name: 'Check Sources Executed',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [10912, 6144],
+        position: [11296, 6144],
     })
     CheckSourcesExecuted = {
         conditions: {
@@ -3476,7 +3476,7 @@ Article page:
         name: 'Check Sources Executed1',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [11136, 5264],
+        position: [11520, 5264],
     })
     CheckSourcesExecuted1 = {
         conditions: {
@@ -4938,7 +4938,7 @@ Article page:
         name: 'Send a message1',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [12704, 4896],
+        position: [13088, 4896],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage1 = {
@@ -4975,7 +4975,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [12704, 5280],
+        position: [13088, 5280],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage = {
@@ -5012,7 +5012,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message2',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [13376, 5504],
+        position: [13760, 5504],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage2 = {
@@ -5048,7 +5048,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message3',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [12032, 5952],
+        position: [12416, 5952],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage3 = {
@@ -5084,7 +5084,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Add Content With Date1',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
-        position: [11808, 5952],
+        position: [12192, 5952],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         onError: 'continueErrorOutput',
     })
@@ -5314,7 +5314,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message4',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [12032, 6144],
+        position: [12416, 6144],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage4 = {
@@ -5350,7 +5350,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Add Content Without Date1',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
-        position: [11808, 6144],
+        position: [12192, 6144],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         onError: 'continueErrorOutput',
     })
@@ -5577,7 +5577,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message5',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [11360, 6272],
+        position: [11744, 6272],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage5 = {
@@ -5613,7 +5613,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Send a message6',
         type: 'n8n-nodes-base.slack',
         version: 2.3,
-        position: [11584, 5488],
+        position: [11968, 5488],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
     })
     SendAMessage6 = {
@@ -5648,7 +5648,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Sonnet 4.5 T0.6',
         type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
         version: 1.3,
-        position: [6816, 5536],
+        position: [6832, 5536],
         credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
     })
     Sonnet45T06 = {
@@ -5887,7 +5887,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Get 100 best articles',
         type: 'n8n-nodes-base.limit',
         version: 1,
-        position: [8048, 5072],
+        position: [8432, 5072],
     })
     Get100BestArticles = {
         maxItems: 100,
@@ -5898,7 +5898,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Structured Output Parser2',
         type: '@n8n/n8n-nodes-langchain.outputParserStructured',
         version: 1.3,
-        position: [7136, 5552],
+        position: [7152, 5552],
         retryOnFail: true,
         waitBetweenTries: 5000,
     })
@@ -6049,7 +6049,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Structured Output Parser27',
         type: '@n8n/n8n-nodes-langchain.outputParserStructured',
         version: 1.3,
-        position: [7152, 5104],
+        position: [7024, 5024],
     })
     StructuredOutputParser27 = {
         jsonSchemaExample: `{
@@ -6256,7 +6256,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Merge2',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [6656, 5328],
+        position: [6624, 5328],
     })
     Merge2 = {};
 
@@ -6265,7 +6265,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Merge Stage 4',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [7168, 5136],
+        position: [7552, 5328],
     })
     MergeStage4 = {};
 
@@ -6274,7 +6274,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         name: 'Perform Final Calculation',
         type: 'n8n-nodes-base.code',
         version: 2,
-        position: [7376, 5328],
+        position: [7760, 5328],
     })
     PerformFinalCalculation = {
         mode: 'runOnceForEachItem',
@@ -6297,7 +6297,7 @@ if (pathway === "D") {
     strategic_summary: claudeOutput.topic_summary || null,
     key_highlights: claudeOutput.key_highlights || [],
     recommended_action: claudeOutput.syntech_relevance || null,
-    total_score: null,
+    total_score: 10,
     decision: "SURFACE",
     priority_band: "EXPERT",
     threshold_met: true,
@@ -6441,9 +6441,7 @@ return {
         version: 1,
         position: [1840, 5424],
     })
-    Limit16Items = {
-        maxItems: 100,
-    };
+    Limit16Items = {};
 
     @node({
         id: 'f4d7b9a2-8e1c-4c52-9f31-3b2a7d6e4c81',
@@ -6643,64 +6641,91 @@ return {
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
-SOURCE: {{ $('Deduplicated Articles').item.json.url }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
-SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}`,
+SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
+SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
+`,
         hasOutputParser: true,
         needsFallback: true,
         messages: {
             messageValues: [
                 {
-                    message: `=## STAGE 1: FOSSIL FUEL FILTER
+                    message: `=# STAGE 1: FOSSIL FUEL FILTER
 
-### SYSTEM MESSAGE:
+**Purpose**: Block irrelevant fossil fuel content. Bypass entirely for special source types.
+**Decision**: PASS or REJECT
+**Token Budget**: 80 tokens
 
-# ROLE
-You are a binary content filter for Syntech Biofuel, a UK company that converts waste cooking oils into biodiesel.
+---
 
-# TASK
-Block articles about fossil fuels (petroleum, LNG, coal) with NO biofuel connection.
+## SYSTEM MESSAGE
 
-# DECISION LOGIC
+### STEP 0: SOURCE CHECK (Run First)
+
 \`\`\`
-Is article about petroleum/natural gas/coal operations WITHOUT biofuel component?
-├─ YES → REJECT
-└─ NO → PASS
+Read source_platform and source_category from input.
 
-Does article mention ANY biofuel keywords OR downstream policy effects?
-├─ YES → PASS  
-└─ UNCERTAIN → PASS (prefer false positives)
+IF source_category = "Customer" AND source_platform = "LinkedIn" → PASS (auto)
+IF source_category = "Expert" AND source_platform = "LinkedIn" → PASS (auto)
+IF source_category = "Competitor" AND source_platform = "LinkedIn" → PASS (auto)
+
+All other sources → continue to Step 1
 \`\`\`
 
-# BIOFUEL KEYWORDS (Auto-pass if present)
+### STEP 1: BIOFUEL KEYWORD CHECK
+
+**Auto-pass if ANY present:**
+
 - Used cooking oil, UCO, recycled cooking oil
 - HVO, FAME, B100, biodiesel, renewable diesel
 - Tallow, animal fats, waste oils, waste fats
 - Biofuel, biofuels, sustainable aviation fuel (SAF)
 - Waste-to-fuel, circular economy fuels
 
-# VIP KEYWORDS (Auto-pass if present)
-- Lower Thames Crossing, Balfour Beatty, SSE, NetZero Teesside, Sizewell C
+### STEP 2: VIP KEYWORD CHECK
 
-# POLICY KEYWORDS (Auto-pass if creating fuel demand)
+**Auto-pass if ANY present:**
+
+- Balfour Beatty, SSE, Lower Thames Crossing, NetZero Teesside, Sizewell, Sizewell C Consortium
+- National Highways, Highland Fuels, Falkirk Council, A9 Duelling, Highland Council
+- Transport for London, TFL, Sunbelt Rentals
+
+### STEP 3: POLICY KEYWORD CHECK
+
+**Auto-pass if article discusses:**
+
 - Government budget + construction/infrastructure/transport
 - Decarbonisation + construction/logistics
 - Net zero + Scope 3 emissions
 
-# OUTPUT
+### STEP 4: FOSSIL FUEL CHECK
+
+\`\`\`
+Is article primarily about petroleum/natural gas/coal operations 
+WITH NO biofuel connection?
+├─ YES → REJECT
+└─ NO / UNCERTAIN → PASS
+\`\`\`
+
+### OUTPUT FORMAT
+
 \`\`\`json
 {
   "decision": "PASS" | "REJECT",
+  "auto_pass_reason": "customer_linkedin" | "expert_linkedin" | "competitor_linkedin" | "biofuel_keyword" | "vip_keyword" | "policy_keyword" | null,
   "reason": "Brief explanation",
-  "keywords_detected": ["list of keywords found"]
+  "keywords_detected": ["list of keywords found"] | []
 }
 \`\`\`
 
-# EXAMPLES
-- "Lindsey oil refinery closes" (no biofuel) → REJECT
-- "Refinery converts to HVO production" → PASS (biofuel keyword)
-- "Government budget for construction projects" → PASS (policy creating fuel demand)
-- "Balfour Beatty wins contract" → PASS (VIP keyword)`,
+### EXAMPLES
+
+- Source: LinkedIn / Customer → \`PASS (auto)\`, no content check needed
+- Source: LinkedIn / Expert → \`PASS (auto)\`, no content check needed
+- "Lindsey oil refinery closes" (RSS, no biofuel) → \`REJECT\`
+- "Refinery converts to HVO production" (RSS) → \`PASS\` (biofuel keyword)
+- "Balfour Beatty wins contract" (RSS) → \`PASS\` (VIP keyword)
+- "Government budget for construction projects" (RSS) → \`PASS\` (policy keyword)`,
                 },
             ],
         },
@@ -6726,7 +6751,7 @@ Does article mention ANY biofuel keywords OR downstream policy effects?
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}`,
         hasOutputParser: true,
         needsFallback: true,
@@ -6923,7 +6948,7 @@ Source: LinkedIn / Competitor — any content
         name: 'Threshold Met?',
         type: 'n8n-nodes-base.if',
         version: 2.3,
-        position: [7600, 5328],
+        position: [7984, 5328],
     })
     ThresholdMet = {
         conditions: {
@@ -6955,7 +6980,7 @@ Source: LinkedIn / Competitor — any content
         name: 'select fields1',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [7824, 5408],
+        position: [8208, 5408],
     })
     SelectFields1 = {
         assignments: {
@@ -7053,7 +7078,7 @@ Source: LinkedIn / Competitor — any content
 
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
@@ -7096,13 +7121,13 @@ This stage determines which TYPE of content this is. Tim values FOUR types of in
 1. **Pathway A** — Direct biofuel content (adoption, tech validation, market intel)
 2. **Pathway B** — VIP strategic intelligence (customer projects creating fuel demand)
 3. **Pathway C** — Regulatory/market forces (policy creating biofuel opportunities)
-4. **Pathway D** — Expert thought leadership (climate, decarbonisation, broader research)
+4. **Pathway D** — Expert thought leadership (LinkedIn Expert sources only)
 
 Each pathway is evaluated differently in Stage 4A or Stage 4B.
 
 ---
 
-## PATHWAY CLASSIFICATION
+### PATHWAY CLASSIFICATION
 
 Check pathways in order.
 
@@ -7177,24 +7202,14 @@ Check pathways in order.
 
 #### PATHWAY D: EXPERT THOUGHT LEADERSHIP
 
-**Route here if content is from an expert/thought leader OR covers broader climate, decarbonisation, or environmental research.**
+**Route here ONLY if source is LinkedIn / Expert. This pathway is not triggered by content.**
 
-**Auto-route:** LinkedIn / Expert → always PATHWAY D
-
-**Triggers (for non-LinkedIn sources):**
-- Climate science, research papers, academic findings
-- Decarbonisation policy opinion and analysis
-- Environmental impact reporting
-- Broader energy transition commentary
-- Content clearly from a recognised thought leader or research institution
+**Auto-route:** LinkedIn / Expert → always PATHWAY D, regardless of content
 
 **Examples that trigger Pathway D:**
-- ✅ "New paper: methane emissions 70% higher than reported" (LinkedIn / Expert)
-- ✅ "Why net zero policy timelines are misaligned with climate data" (LinkedIn / Expert)
-- ✅ "IPCC report findings on fossil fuel phase-out timelines"
-- ✅ "Academic study: UCO supply chains and circular economy benefits"
+- ✅ Any post from LinkedIn / Expert source
 
-**If expert/climate/research content with no biofuel/VIP/policy trigger → PATHWAY D**
+**Pathway D is never triggered by content analysis — only by the Step 0 source check.**
 
 ---
 
@@ -7205,13 +7220,13 @@ Check pathways in order.
 - No biofuel keywords AND
 - No VIP entities AND
 - No regulatory/policy fuel demand drivers AND
-- No expert/climate/research content AND
 - Generic news unrelated to Syntech's business
 
 **Examples to reject:**
-- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, policy, or expert)
+- ❌ "Construction workforce skills shortage impacts delivery" (no biofuel, VIP, or policy)
 - ❌ "New office development announced in Manchester" (generic construction)
 - ❌ "Electric vehicle charging infrastructure expands" (EVs, not biofuels)
+- ❌ "Global air travel demand to double by 2050" (no biofuel, VIP, or policy relevance)
 
 ---
 
@@ -7234,10 +7249,6 @@ Step 2: VIP entity or strategic infrastructure?
 
 Step 3: Regulatory/policy fuel demand drivers?
   ├─ YES → PATHWAY C
-  └─ NO → Step 4
-
-Step 4: Expert/climate/research content?
-  ├─ YES → PATHWAY D
   └─ NO → REJECT
 \`\`\`
 
@@ -8499,7 +8510,7 @@ This is the old Notion schema. `,
         name: 'Anthropic Chat Model',
         type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
         version: 1.3,
-        position: [7088, 5760],
+        position: [7184, 5760],
         credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
     })
     AnthropicChatModel = {
@@ -9250,7 +9261,7 @@ IF score < 3 → REJECT
         name: '📊 STAGE - 4A: Strategic Value Scorer',
         type: '@n8n/n8n-nodes-langchain.chainLlm',
         version: 1.9,
-        position: [6912, 5328],
+        position: [6880, 5344],
     })
     Stage4aStrategicValueScorer = {
         promptType: '=define',
@@ -9259,7 +9270,7 @@ IF score < 3 → REJECT
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
 SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
@@ -9781,7 +9792,7 @@ IF score < 3 → REJECT
         name: '🎓 STAGE - 4B: Expert Content Processor',
         type: '@n8n/n8n-nodes-langchain.chainLlm',
         version: 1.9,
-        position: [6912, 4928],
+        position: [6864, 4880],
     })
     Stage4bExpertContentProcessor = {
         promptType: '=define',
@@ -9790,7 +9801,7 @@ IF score < 3 → REJECT
 ARTICLE TITLE: {{ $('Deduplicated Articles').item.json.title }}
 ARTICLE CONTENT: {{ $('Deduplicated Articles').item.json.content }}
 SOURCE URL: {{ $('Deduplicated Articles').item.json.url }}
-SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source_platform }}
+SOURCE PLATFORM: {{ $('Deduplicated Articles').item.json.source }}
 SOURCE CATEGORY: {{ $('Deduplicated Articles').item.json.source_category }}
 
 PREVIOUS STAGE OUTPUTS:
@@ -9950,7 +9961,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Get Default Platform Prompts',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [8784, 5504],
+        position: [9168, 5504],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         executeOnce: true,
     })
@@ -9983,7 +9994,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Get Default Image Prompts',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [8784, 5696],
+        position: [9168, 5696],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         executeOnce: true,
     })
@@ -10016,7 +10027,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Aggregate Image Prompts',
         type: 'n8n-nodes-base.aggregate',
         version: 1,
-        position: [9072, 5696],
+        position: [9456, 5696],
         alwaysOutputData: false,
     })
     AggregateImagePrompts = {
@@ -10030,7 +10041,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Aggregate Platform Prompts',
         type: 'n8n-nodes-base.aggregate',
         version: 1,
-        position: [9072, 5504],
+        position: [9456, 5504],
         alwaysOutputData: false,
     })
     AggregatePlatformPrompts = {
@@ -10044,7 +10055,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Set Platform Prompts',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [9296, 5504],
+        position: [9680, 5504],
     })
     SetPlatformPrompts = {
         assignments: {
@@ -10065,7 +10076,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Set Image Prompts',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [9296, 5696],
+        position: [9680, 5696],
     })
     SetImagePrompts = {
         assignments: {
@@ -10086,7 +10097,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Final Input',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [10016, 6064],
+        position: [10400, 6064],
     })
     FinalInput = {
         mode: 'combine',
@@ -10099,7 +10110,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Image and Platform Prompts',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [9520, 5664],
+        position: [9904, 5664],
     })
     ImageAndPlatformPrompts = {};
 
@@ -10108,7 +10119,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Default Article Outputs',
         type: 'n8n-nodes-base.aggregate',
         version: 1,
-        position: [9744, 5664],
+        position: [10128, 5664],
     })
     DefaultArticleOutputs = {
         aggregate: 'aggregateAllItemData',
@@ -10120,7 +10131,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Sticky Note2',
         type: 'n8n-nodes-base.stickyNote',
         version: 1,
-        position: [8704, 5392],
+        position: [9088, 5392],
     })
     StickyNote2 = {
         content: `## Set default outputs
@@ -10219,7 +10230,7 @@ This add default content and image types to each article
         name: 'Anthropic Chat Model1',
         type: '@n8n/n8n-nodes-langchain.lmChatAnthropic',
         version: 1.3,
-        position: [7216, 5264],
+        position: [7120, 5168],
         credentials: { anthropicApi: { id: '0c1nNLaJWpeD3Cqz', name: 'Syntech GM Anthropic account' } },
     })
     AnthropicChatModel1 = {
@@ -10404,7 +10415,7 @@ This add default content and image types to each article
         this.PathwayRouter.out(0).to(this.NoOperationDoNothing1.in(0));
         this.PathwayRouter.out(1).to(this.Stage4bExpertContentProcessor.in(0));
         this.PathwayRouter.out(2).to(this.Merge2.in(0));
-        this.Stage4bExpertContentProcessor.out(0).to(this.MergeStage4.in(1));
+        this.Stage4bExpertContentProcessor.out(0).to(this.MergeStage4.in(0));
         this.ViewVipResults.out(0).to(this.Merge2.in(1));
         this.Stage1FossilFuelFilter.out(0).to(this.KeepBiofuelContent1.in(0));
         this.Stage2VipKeywordHandler.out(0).to(this.IfVipArticle.in(0));
@@ -10416,7 +10427,7 @@ This add default content and image types to each article
         this.MapDataForNotion2.out(0).to(this.MapDataForNotion3.in(0));
         this.MapDataForNotion3.out(0).to(this.AddContentWithDate2.in(0));
         this.AddContentWithDate2.out(0).to(this.AddContentWithDate3.in(0));
-        this.Stage4aStrategicValueScorer.out(0).to(this.MergeStage4.in(0));
+        this.Stage4aStrategicValueScorer.out(0).to(this.MergeStage4.in(1));
         this.MergeStage4.out(0).to(this.PerformFinalCalculation.in(0));
         this.Aggregate.out(0).to(this.SemanticKeywordDeduplication.in(0));
         this.SemanticKeywordDeduplication.out(0).to(this.DeduplicatedArticles.in(0));
@@ -10452,23 +10463,23 @@ This add default content and image types to each article
             ai_languageModel: this.AnthropicChatModel2.output,
         });
         this.Stage1FossilFuelFilter.uses({
-            ai_languageModel: this.AnthropicChatModel6.output,
+            ai_languageModel: this.OpenaiChatModel1.output,
             ai_outputParser: this.StructuredOutputParser24.output,
         });
         this.Stage2VipKeywordHandler.uses({
-            ai_languageModel: this.AnthropicChatModel7.output,
+            ai_languageModel: this.OpenaiChatModel.output,
             ai_outputParser: this.StructuredOutputParser.output,
         });
         this.Stage3TopicDensityTest.uses({
-            ai_languageModel: this.AnthropicChatModel8.output,
+            ai_languageModel: this.OpenaiChatModel2.output,
             ai_outputParser: this.StructuredOutputParser26.output,
         });
         this.Stage4aStrategicValueScorer.uses({
-            ai_languageModel: this.Sonnet45T06.output,
+            ai_languageModel: this.OpenaiChatModel3.output,
             ai_outputParser: this.StructuredOutputParser2.output,
         });
         this.Stage4bExpertContentProcessor.uses({
-            ai_languageModel: this.Sonnet45T0.output,
+            ai_languageModel: this.OpenaiChatModel4.output,
             ai_outputParser: this.StructuredOutputParser27.output,
         });
     }
