@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : News Sourcing Production (V2)
-// Nodes   : 150  |  Connections: 140
+// Nodes   : 152  |  Connections: 141
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -50,8 +50,6 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // OpenaiChatModel8                   lmChatOpenAi               [creds] [ai_languageModel]
 // Evaluation1                        evaluation                 [AI]
 // UrgentlyWatchedList                executeWorkflowTrigger
-// FilterArticlesByTopic              httpRequest                [onError→out(1)] [creds] [retry]
-// FilterArticlesByTopic1             httpRequest                [onError→out(1)] [creds] [retry]
 // ManuallyTriggerContentEngine       webhook
 // ScrapeAUrlAndGetItsContent3        firecrawl                  [onError→regular] [creds]
 // IfNotError3                        if
@@ -157,6 +155,10 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // OpenaiChatModel4                   lmChatOpenAi               [creds] [ai_languageModel]
 // NoOperationDoNothing1              noOp
 // Sonnet45T0                         lmChatAnthropic            [creds]
+// CodeInJavascript                   code
+// FilterArticlesByTopic2             httpRequest                [onError→out(1)] [creds] [retry]
+// FilterArticlesByTopic              httpRequest                [onError→out(1)] [creds] [retry]
+// FilterArticlesByTopic1             httpRequest                [onError→out(1)] [creds] [retry]
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -306,6 +308,8 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //    → MapDataForNotion3
 //      → AddContentWithDate2
 //        → AddContentWithDate3
+// CodeInJavascript
+//    → FilterArticlesByTopic2
 //
 // AI CONNECTIONS
 // Evaluation1.uses({ ai_languageModel: OpenaiChatModel8 })
@@ -1764,54 +1768,6 @@ Do not include any reasoning, explanation, or additional text.
     })
     UrgentlyWatchedList = {
         inputSource: 'passthrough',
-    };
-
-    @node({
-        id: 'ee2831e4-ac48-4dda-b9f0-96abdb34a383',
-        name: 'Filter Articles By Topic',
-        type: 'n8n-nodes-base.httpRequest',
-        version: 4.2,
-        position: [11520, 6224],
-        credentials: { httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' } },
-        onError: 'continueErrorOutput',
-        retryOnFail: true,
-        maxTries: 3,
-        waitBetweenTries: 5000,
-    })
-    FilterArticlesByTopic = {
-        method: 'POST',
-        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
-        authentication: 'genericCredentialType',
-        genericAuthType: 'httpHeaderAuth',
-        sendBody: true,
-        contentType: 'json',
-        specifyBody: 'json',
-        jsonBody: '={{ { "article": $json.toJsonString() } }}',
-        options: {},
-    };
-
-    @node({
-        id: 'b6671c61-836f-4510-9343-ca0680bf4de5',
-        name: 'Filter Articles By Topic1',
-        type: 'n8n-nodes-base.httpRequest',
-        version: 4.2,
-        position: [11744, 5440],
-        credentials: { httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' } },
-        onError: 'continueErrorOutput',
-        retryOnFail: true,
-        maxTries: 3,
-        waitBetweenTries: 5000,
-    })
-    FilterArticlesByTopic1 = {
-        method: 'POST',
-        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
-        authentication: 'genericCredentialType',
-        genericAuthType: 'httpHeaderAuth',
-        sendBody: true,
-        contentType: 'json',
-        specifyBody: 'json',
-        jsonBody: '={{ { "article": $json.toJsonString() } }}',
-        options: {},
     };
 
     @node({
@@ -10263,6 +10219,215 @@ This add default content and image types to each article
         },
     };
 
+    @node({
+        id: '65a79c64-e22c-4dec-9f7e-4d727811eb5b',
+        name: 'Code in JavaScript',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [11328, 6528],
+    })
+    CodeInJavascript = {
+        jsCode: `return {
+  "data": [
+    {
+      "platform_prompt_ids": [
+        "2b7785c0-cfab-8096-afb4-ed4f01eee75c"
+      ]
+    },
+    {
+      "image_prompt_ids": [
+        "2e6785c0-cfab-8010-8513-e4af8c17e77f",
+        "2e7785c0-cfab-8060-bd47-ced887736f8a",
+        "2e7785c0-cfab-8011-b3de-e1e60aa875d7",
+        "2e7785c0-cfab-80ac-94d1-ddc5568bc98b"
+      ]
+    }
+  ],
+  "title": "How Sizewell C nuclear project can help UK ‘take back control of energy supply’ amid volatile market",
+  "content": "The government has announced plans to accelerate planning approvals for the Sizewell C nuclear project and a major sustainable aviation fuel (SAF) plant.\\n\\nMinisters have designated the Environment Agency as the “lead environmental regulator” for the nuclear power station on the Suffolk coast and Lighthouse Green Fuels, a Teesside facility producing green fuel for aeroplanes. \\n\\nThis aims to streamline a process where developers typically engage with multiple bodies – including Natural England, the Marine Management Organisation, and Forestry England – a system often leading to costly delays in securing planning approval.\\n\\nThe Environment Agency will now act as a single point of contact, coordinating all environmental checks on the projects’ potential impact on nature. \\n\\nThe Department for Environment, Food and Rural Affairs (Defra) has, however, assured that this change will not lead to a watering down of green standards, as the agency will co-ordinate with the other regulators on all the same assessments.\\n\\nConstruction works on the site of the new Sizewell C nuclear power plant in Suffolk (REUTERS/Chris Radburn/File Photo)\\n\\nMinisters say Sizewell C could supply six million homes with nuclear energy, reducing England’s reliance on foreign fossil fuel imports and its exposure to volatile prices.\\n\\nIf approved, the Lighthouse Green Fuels project will become Europe’s largest SAF plant for fuels made from sources such as agricultural waste, forestry residues, municipal solid waste and used cooking oils instead of food crops.\\n\\nEnvironment Secretary Emma Reynolds said: “We are taking back control of our energy supply to bring stability for families and create skilled jobs for local people, without compromising on environmental protections.\\n\\n“Global shocks from conflicts in Ukraine and the Middle East show that relying on a volatile global fossil fuel market is simply not sustainable for Britain.\\n\\n“These measures are a win-win for energy security, nature and for keeping bills down in the long-run.”\\n\\nIt comes amid the Government’s wider efforts to remove almost all fossil fuels from the UK’s electricity generation by 2030, as well as overhaul the planning system to speed up the rollout of new energy and infrastructure projects.\\n\\nLast month, Energy Secretary Ed Miliband unveiled plans to speed up new nuclear power projects by overhauling regulations and cutting costs as part of the Government’s response to an independent review, led by former Office of Fair Trading boss John Fingleton.\\n\\nMinisters said they will implement some recommendations from the review by the end of the year, which includes appointing a lead regulator to reduce bureaucracy in the planning process.\\n\\nWhile the Government will not carry forward the recommendation to water down regulations that protect the country’s most important habitats, green groups said concerns and uncertainties remain over how the reforms could affect environmental protections.\\n\\nMina Golshan, safety, security and assurance director at Sizewell C, said: “Simplifying regulation like this will lead to better outcomes for the environment, greater efficiencies for our project, and better value for consumers.\\n\\n“It gives us a simple framework to build on our already constructive relationship with the Environment Agency – and we embrace the opportunity to demonstrate how regulation can work more effectively and efficiently for both project delivery and environmental protection.”\\n\\nNoaman Al Adhami, UK country head for Alfanar Projects, the developers behind Lighthouse Green Fuels, said: “We welcome the opportunity to support Defra’s lead environmental regulator pilot, which represents an important step forward in streamlining engagement with statutory bodies and accelerating the delivery of major infrastructure projects.\\n\\n“By enabling earlier, more co-ordinated regulatory input, this initiative will help unlock investment and support the timely progression of projects like Lighthouse Green Fuels as we advance towards construction.”\\n\\n## Duplicate Articles:\\n\\nTitle 1: UK power station ‘could supply up to six million homes with nuclear energy’\\nSummary 1: The UK government will streamline approvals for Sizewell C nuclear plant, supplying six million homes, and Europe's largest sustainable aviation fuel plant, aiming to boost energy security and reduce fossil fuel reliance by 2030.\\nUrl 1: https://www.independent.co.uk/bulletin/news/mucler-energy-uk-sizewell-c-lighthouse-green-fuels-b2954146.html",
+  "url": "https://www.independent.co.uk/news/uk/politics/sizewell-c-nuclear-energy-fuel-iran-middle-east-uk-b2953802.html",
+  "summary": "The UK government plans to fast-track Sizewell C nuclear plant and a green aviation fuel facility, aiming to supply six million homes, reduce reliance on imports, and enhance energy security while maintaining environmental standards.",
+  "search_query": "Sizewell",
+  "publication_date": "2026-04-08T17:30:00.000-04:00",
+  "prompt": null,
+  "additional_formats": null,
+  "source": "Website",
+  "source_name": "Sizewell",
+  "mode": null,
+  "relevance_score": null,
+  "reason": null,
+  "analysis": {
+    "pathway": "B",
+    "scoring_breakdown": {
+      "pathway_a": {
+        "fuel_type_gate": {
+          "points": 0,
+          "passed": false,
+          "evidence": "Article mentions SAF (sustainable aviation fuel) but this is not Syntech's market. SAF is aviation-focused, not construction/logistics biodiesel."
+        },
+        "substance_gate": {
+          "passed": false,
+          "specific_adoption": "Lighthouse Green Fuels SAF plant mentioned but not operational - still in planning/approval stage",
+          "measurable_data": "Europe's largest SAF plant claim, but no deployment volumes or operational metrics",
+          "proof_progress": "Planning acceleration announced, not operational deployment"
+        },
+        "operational_deployment": {
+          "points": 0,
+          "evidence": "No operational deployment of biodiesel in construction or logistics mentioned in article"
+        },
+        "technology_validation": {
+          "points": 0,
+          "evidence": "No technology validation evidence for biodiesel applications"
+        },
+        "sales_opportunity": {
+          "points": 0,
+          "evidence": null
+        },
+        "market_intelligence": {
+          "points": 0,
+          "evidence": null
+        },
+        "oem_breakthrough": {
+          "points": 0,
+          "evidence": null
+        },
+        "strategic_relevance": {
+          "points": 0,
+          "evidence": "Article focuses on SAF and nuclear, not biodiesel for construction/logistics"
+        }
+      },
+      "pathway_b": {
+        "vip_confirmation": null,
+        "project_scale": {
+          "points": 5,
+          "evidence": null
+        },
+        "timeline_urgency": {
+          "points": 3,
+          "evidence": null
+        },
+        "decarbonization_commitment": {
+          "points": 3,
+          "evidence": null
+        },
+        "strategic_positioning": {
+          "points": 2,
+          "evidence": null
+        }
+      },
+      "pathway_c": {
+        "policy_scale": {
+          "points": 0,
+          "evidence": null
+        },
+        "timeline_implementation": {
+          "points": 0,
+          "evidence": null
+        },
+        "syntech_alignment": {
+          "points": 0,
+          "evidence": null
+        },
+        "market_opportunity": {
+          "points": 0,
+          "evidence": null
+        }
+      }
+    },
+    "strategic_summary": "Sizewell C planning acceleration signals imminent construction phase for major VIP customer, creating significant fuel demand opportunity for multi-year infrastructure project aligned with UK decarbonization goals.",
+    "key_highlights": [
+      "Government fast-tracking Sizewell C approvals with Environment Agency as lead regulator - construction phase approaching",
+      "Major infrastructure project supplying six million homes - multi-year equipment and fuel demand",
+      "Explicit government commitment to energy security and fossil fuel reduction creates procurement opportunity for drop-in biofuel solutions"
+    ],
+    "recommended_action": "Proactive outreach to Sizewell C procurement team regarding biodiesel supply for construction equipment fleet. Position Syntech as aligned with project's energy security and decarbonization objectives, emphasizing drop-in fuel capability for NRMM applications.",
+    "total_score": 13,
+    "decision": "SURFACE",
+    "priority_band": "MUST-READ",
+    "threshold_met": true,
+    "active_scoring_components": "Project Scale: null | Timeline: null | Decarbonization: null | Positioning: null"
+  }
+}`,
+    };
+
+    @node({
+        id: 'f0c83b5b-5f31-490e-8dc7-5adfd8d4d46b',
+        name: 'Filter Articles By Topic2',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
+        position: [11536, 6528],
+        credentials: {
+            httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' },
+            httpBearerAuth: { id: 'JmQByIdKZ85XtGwZ', name: 'Syntech Article Classifier Bearer' },
+        },
+        onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
+    })
+    FilterArticlesByTopic2 = {
+        method: 'POST',
+        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBearerAuth',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { "article": $json.toJsonString() } }}',
+        options: {},
+    };
+
+    @node({
+        id: 'd2eb0771-55b3-47cb-b69f-8ddb4bccb06a',
+        name: 'Filter Articles By Topic',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
+        position: [11504, 6240],
+        credentials: {
+            httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' },
+            httpBearerAuth: { id: 'JmQByIdKZ85XtGwZ', name: 'Syntech Article Classifier Bearer' },
+        },
+        onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
+    })
+    FilterArticlesByTopic = {
+        method: 'POST',
+        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBearerAuth',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { "article": $json.toJsonString() } }}',
+        options: {},
+    };
+
+    @node({
+        id: 'ec1bcba3-f3db-4403-b7b1-80764c383b10',
+        name: 'Filter Articles By Topic1',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
+        position: [11744, 5344],
+        credentials: {
+            httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' },
+            httpBearerAuth: { id: 'JmQByIdKZ85XtGwZ', name: 'Syntech Article Classifier Bearer' },
+        },
+        onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
+    })
+    FilterArticlesByTopic1 = {
+        method: 'POST',
+        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBearerAuth',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { "article": $json.toJsonString() } }}',
+        options: {},
+    };
+
     // =====================================================================
     // ROUTAGE ET CONNEXIONS
     // =====================================================================
@@ -10330,10 +10495,6 @@ This add default content and image types to each article
         this.Filter.out(0).to(this.SetGoogleSheetFields.in(0));
         this.Filter.out(0).to(this.GetAllIdeasFromEvaluationTable2.in(0));
         this.UrgentlyWatchedList.out(0).to(this.ScrapeAUrlAndGetItsContent3.in(0));
-        this.FilterArticlesByTopic.out(0).to(this.MapDataForNotion.in(0));
-        this.FilterArticlesByTopic.out(1).to(this.SendAMessage5.in(0));
-        this.FilterArticlesByTopic1.out(0).to(this.MapDataForNotion1.in(0));
-        this.FilterArticlesByTopic1.out(1).to(this.SendAMessage6.in(0));
         this.ManuallyTriggerContentEngine.out(0).to(this.GetAllSources.in(0));
         this.ScrapeAUrlAndGetItsContent3.out(0).to(this.IfNotError3.in(0));
         this.IfNotError3.out(0).to(this.CreateSummaryAndTitle10.in(0));
@@ -10409,6 +10570,11 @@ This add default content and image types to each article
         this.FinalInput.out(0).to(this.IfFromForm1.in(0));
         this.ImageAndPlatformPrompts.out(0).to(this.DefaultArticleOutputs.in(0));
         this.DefaultArticleOutputs.out(0).to(this.FinalInput.in(0));
+        this.CodeInJavascript.out(0).to(this.FilterArticlesByTopic2.in(0));
+        this.FilterArticlesByTopic.out(0).to(this.MapDataForNotion.in(0));
+        this.FilterArticlesByTopic.out(1).to(this.SendAMessage5.in(0));
+        this.FilterArticlesByTopic1.out(0).to(this.MapDataForNotion1.in(0));
+        this.FilterArticlesByTopic1.out(1).to(this.SendAMessage6.in(0));
 
         this.Evaluation1.uses({
             ai_languageModel: this.OpenaiChatModel8.output,
