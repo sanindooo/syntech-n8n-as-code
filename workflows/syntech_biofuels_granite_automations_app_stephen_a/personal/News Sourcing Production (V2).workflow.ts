@@ -50,8 +50,8 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // OpenaiChatModel8                   lmChatOpenAi               [creds] [ai_languageModel]
 // Evaluation1                        evaluation                 [AI]
 // UrgentlyWatchedList                executeWorkflowTrigger
-// FilterArticlesByTopic              executeWorkflow            [onError→out(1)]
-// FilterArticlesByTopic1             executeWorkflow            [onError→out(1)]
+// FilterArticlesByTopic              httpRequest                [onError→out(1)] [creds] [retry]
+// FilterArticlesByTopic1             httpRequest                [onError→out(1)] [creds] [retry]
 // ManuallyTriggerContentEngine       webhook
 // ScrapeAUrlAndGetItsContent3        firecrawl                  [onError→regular] [creds]
 // IfNotError3                        if
@@ -328,7 +328,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     id: 'UzEv74M2D2q4z0Zx',
     name: 'News Sourcing Production (V2)',
-    active: true,
+    active: false,
     tags: ['NEWS+'],
     settings: {
         executionOrder: 'v1',
@@ -1769,82 +1769,48 @@ Do not include any reasoning, explanation, or additional text.
     @node({
         id: 'ee2831e4-ac48-4dda-b9f0-96abdb34a383',
         name: 'Filter Articles By Topic',
-        type: 'n8n-nodes-base.executeWorkflow',
-        version: 1.3,
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
         position: [11520, 6224],
+        credentials: { httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' } },
         onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
     })
     FilterArticlesByTopic = {
-        workflowId: {
-            __rl: true,
-            value: 'sK-5ZAHQNG8DcOcN6Ggch',
-            mode: 'list',
-            cachedResultUrl: '/workflow/sK-5ZAHQNG8DcOcN6Ggch',
-            cachedResultName: 'Filter Articles By Topic (Prod)',
-        },
-        workflowInputs: {
-            mappingMode: 'defineBelow',
-            value: {
-                article: '={{ $json.toJsonString() }}',
-            },
-            matchingColumns: [],
-            schema: [
-                {
-                    id: 'article',
-                    displayName: 'article',
-                    required: false,
-                    defaultMatch: false,
-                    display: true,
-                    canBeUsedToMatch: true,
-                    type: 'string',
-                    removed: false,
-                },
-            ],
-            attemptToConvertTypes: false,
-            convertFieldsToString: true,
-        },
-        mode: 'each',
+        method: 'POST',
+        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpHeaderAuth',
+        sendBody: true,
+        contentType: 'json',
+        specifyBody: 'json',
+        jsonBody: '={{ { "article": $json.toJsonString() } }}',
         options: {},
     };
 
     @node({
         id: 'b6671c61-836f-4510-9343-ca0680bf4de5',
         name: 'Filter Articles By Topic1',
-        type: 'n8n-nodes-base.executeWorkflow',
-        version: 1.3,
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
         position: [11744, 5440],
+        credentials: { httpHeaderAuth: { id: 'kzydmFSpHI8T1Y9W', name: 'Syntech Classifier Bearer' } },
         onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
     })
     FilterArticlesByTopic1 = {
-        workflowId: {
-            __rl: true,
-            value: 'sK-5ZAHQNG8DcOcN6Ggch',
-            mode: 'list',
-            cachedResultUrl: '/workflow/sK-5ZAHQNG8DcOcN6Ggch',
-            cachedResultName: 'Filter Articles By Topic (Prod)',
-        },
-        workflowInputs: {
-            mappingMode: 'defineBelow',
-            value: {
-                article: '={{ $json.toJsonString() }}',
-            },
-            matchingColumns: [],
-            schema: [
-                {
-                    id: 'article',
-                    displayName: 'article',
-                    required: false,
-                    defaultMatch: false,
-                    display: true,
-                    canBeUsedToMatch: true,
-                    type: 'string',
-                    removed: false,
-                },
-            ],
-            attemptToConvertTypes: false,
-            convertFieldsToString: true,
-        },
-        mode: 'each',
+        method: 'POST',
+        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpHeaderAuth',
+        sendBody: true,
+        contentType: 'json',
+        specifyBody: 'json',
+        jsonBody: '={{ { "article": $json.toJsonString() } }}',
         options: {},
     };
 
@@ -6441,7 +6407,9 @@ return {
         version: 1,
         position: [1840, 5424],
     })
-    Limit16Items = {};
+    Limit16Items = {
+        maxItems: 100,
+    };
 
     @node({
         id: 'f4d7b9a2-8e1c-4c52-9f31-3b2a7d6e4c81',
