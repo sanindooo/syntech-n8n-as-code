@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : News Sourcing Production (V2)
-// Nodes   : 152  |  Connections: 141
+// Nodes   : 140  |  Connections: 126
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -97,33 +97,24 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // AnthropicChatModel6                lmChatAnthropic            [creds]
 // AnthropicChatModel7                lmChatAnthropic            [creds]
 // AnthropicChatModel8                lmChatAnthropic            [creds]
-// KeepBiofuelContent1                filter
 // StickyNote13                       stickyNote
 // StickyNote14                       stickyNote
 // StickyNote15                       stickyNote
 // StickyNote16                       stickyNote
 // Get100BestArticles                 limit
-// StructuredOutputParser2            outputParserStructured     [AI] [retry] [ai_outputParser]
-// StructuredOutputParser24           outputParserStructured     [ai_outputParser]
+// StructuredOutputParser2            outputParserStructured     [AI] [retry]
+// StructuredOutputParser24           outputParserStructured
 // StructuredOutputParser25           outputParserStructured
-// StructuredOutputParser26           outputParserStructured     [ai_outputParser]
-// StructuredOutputParser27           outputParserStructured     [AI] [ai_outputParser]
+// StructuredOutputParser26           outputParserStructured
+// StructuredOutputParser27           outputParserStructured     [AI]
 // CallSearchGoogleSyntech            executeWorkflow            [onError→regular]
-// Merge2                             merge
-// MergeStage4                        merge
+// ClassifyViaRelevanceService        httpRequest                [onError→out(1)] [creds] [retry]
 // PerformFinalCalculation            code
 // Limit16Items                       limit
-// PathwayRouter                      switch
-// ViewDensityResults                 set                        [alwaysOutput]
-// ViewVipResults                     set                        [onError→regular] [alwaysOutput]
 // AnthropicChatModel2                lmChatAnthropic            [creds] [ai_languageModel]
-// StructuredOutputParser             outputParserStructured     [AI] [ai_outputParser]
-// Stage1FossilFuelFilter             chainLlm                   [AI] [onError→regular] [retry]
-// Stage2VipKeywordHandler            chainLlm                   [AI] [onError→regular] [retry]
-// IfVipArticle                       if
+// StructuredOutputParser             outputParserStructured     [AI]
 // ThresholdMet                       if
 // SelectFields1                      set
-// Stage3TopicDensityTest             chainLlm                   [AI] [onError→regular] [retry]
 // MapDataForNotion2                  set
 // MapDataForNotion3                  set
 // AddContentWithDate2                httpRequest                [onError→out(1)] [creds]
@@ -131,8 +122,6 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // StickyNote                         stickyNote
 // AnthropicChatModel                 lmChatAnthropic            [creds] [ai_languageModel]
 // Stage4ClassificationAgentClaudeOptimisation1 chainLlm                   [retry]
-// Stage4aStrategicValueScorer        chainLlm                   [AI]
-// Stage4bExpertContentProcessor      chainLlm                   [AI]
 // Aggregate                          aggregate
 // SemanticKeywordDeduplication       httpRequest                [retry]
 // StickyNote1                        stickyNote
@@ -147,13 +136,12 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // ImageAndPlatformPrompts            merge
 // DefaultArticleOutputs              aggregate
 // StickyNote2                        stickyNote
-// OpenaiChatModel1                   lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel                    lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel2                   lmChatOpenAi               [creds] [ai_languageModel]
-// OpenaiChatModel3                   lmChatOpenAi               [creds] [ai_languageModel]
+// OpenaiChatModel1                   lmChatOpenAi               [creds]
+// OpenaiChatModel                    lmChatOpenAi               [creds]
+// OpenaiChatModel2                   lmChatOpenAi               [creds]
+// OpenaiChatModel3                   lmChatOpenAi               [creds]
 // AnthropicChatModel1                lmChatAnthropic            [creds] [ai_languageModel]
-// OpenaiChatModel4                   lmChatOpenAi               [creds] [ai_languageModel]
-// NoOperationDoNothing1              noOp
+// OpenaiChatModel4                   lmChatOpenAi               [creds]
 // Sonnet45T0                         lmChatAnthropic            [creds]
 // CodeInJavascript                   code
 // FilterArticlesByTopic2             httpRequest                [onError→out(1)] [creds] [retry]
@@ -236,30 +224,16 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                             .out(1) → Aggregate
 //                                → SemanticKeywordDeduplication
 //                                  → DeduplicatedArticles
-//                                    → Stage1FossilFuelFilter
-//                                      → KeepBiofuelContent1
-//                                        → Stage2VipKeywordHandler
-//                                          → IfVipArticle
-//                                            → ViewVipResults
-//                                              → Merge2.in(1)
-//                                                → Stage4aStrategicValueScorer
-//                                                  → MergeStage4.in(1)
-//                                                    → PerformFinalCalculation
-//                                                      → ThresholdMet
-//                                                        → Sort
-//                                                          → Get100BestArticles
-//                                                            → Evaluation
-//                                                              → SetOutputInEvaluationGoogleSheet
-//                                                                → Evaluation1
-//                                                             .out(1) → SelectFields (↩ loop)
-//                                                       .out(1) → SelectFields1
-//                                           .out(1) → Stage3TopicDensityTest
-//                                              → ViewDensityResults
-//                                                → PathwayRouter
-//                                                  → NoOperationDoNothing1
-//                                                 .out(1) → Stage4bExpertContentProcessor
-//                                                    → MergeStage4 (↩ loop)
-//                                                 .out(2) → Merge2 (↩ loop)
+//                                    → ClassifyViaRelevanceService
+//                                      → PerformFinalCalculation
+//                                        → ThresholdMet
+//                                          → Sort
+//                                            → Get100BestArticles
+//                                              → Evaluation
+//                                                → SetOutputInEvaluationGoogleSheet
+//                                                  → Evaluation1
+//                                               .out(1) → SelectFields (↩ loop)
+//                                         .out(1) → SelectFields1
 //                        → RemoveDuplicates (↩ loop)
 //                → NoRssUrlAvailable
 //                  → CallRssWebsiteSearchNoRssUrl
@@ -283,7 +257,6 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // RunEvaluation
 //    → GetAllSources1
 //      → MatchInputFormat
-//        → Stage1FossilFuelFilter (↩ loop)
 // FormSubmission1
 //    → Sources
 //      → MatchSources (↩ loop)
@@ -318,11 +291,6 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // StructuredOutputParser2.uses({ ai_languageModel: AnthropicChatModel })
 // StructuredOutputParser27.uses({ ai_languageModel: AnthropicChatModel1 })
 // StructuredOutputParser.uses({ ai_languageModel: AnthropicChatModel2 })
-// Stage1FossilFuelFilter.uses({ ai_languageModel: OpenaiChatModel1, ai_outputParser: StructuredOutputParser24 })
-// Stage2VipKeywordHandler.uses({ ai_languageModel: OpenaiChatModel, ai_outputParser: StructuredOutputParser })
-// Stage3TopicDensityTest.uses({ ai_languageModel: OpenaiChatModel2, ai_outputParser: StructuredOutputParser26 })
-// Stage4aStrategicValueScorer.uses({ ai_languageModel: OpenaiChatModel3, ai_outputParser: StructuredOutputParser2 })
-// Stage4bExpertContentProcessor.uses({ ai_languageModel: OpenaiChatModel4, ai_outputParser: StructuredOutputParser27 })
 // </workflow-map>
 
 // =====================================================================
@@ -6147,9 +6115,7 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
         position: [5088, 5328],
-        credentials: {
-            httpBearerAuth: { id: 'rTkgjtU8QIYs0nXm', name: 'Syntech Relevance Classifier Bearer' },
-        },
+        credentials: { httpBearerAuth: { id: 'rTkgjtU8QIYs0nXm', name: 'Syntech Relevance Classifier Bearer' } },
         onError: 'continueErrorOutput',
         retryOnFail: true,
         maxTries: 3,
@@ -6163,8 +6129,14 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         sendHeaders: true,
         headerParameters: {
             parameters: [
-                { name: 'Content-Type', value: 'application/json' },
-                { name: 'X-Request-Id', value: '={{ $execution.id }}-{{ $itemIndex }}' },
+                {
+                    name: 'Content-Type',
+                    value: 'application/json',
+                },
+                {
+                    name: 'X-Request-Id',
+                    value: '={{ $execution.id }}-{{ $itemIndex }}',
+                },
             ],
         },
         sendBody: true,
@@ -6179,7 +6151,11 @@ OUTPUT: final_score, threshold_met (true/false), priority_band, scoring_breakdow
         }`,
         options: {
             timeout: 15000,
-            response: { response: { responseFormat: 'json' } },
+            response: {
+                response: {
+                    responseFormat: 'json',
+                },
+            },
         },
     };
 
@@ -8815,6 +8791,71 @@ This add default content and image types to each article
         specifyBody: 'json',
         jsonBody: '={{ { "article": $json.toJsonString() } }}',
         options: {},
+    };
+
+    // =====================================================================
+    // CONTENT SOURCING MICROSERVICE (REPLACEMENT FOR SUB-WORKFLOWS)
+    // =====================================================================
+    // This node replaces all the executeWorkflow calls to:
+    // - CallLinkedinSearchProfileKeywordCompany
+    // - CallTavilyKeywordSearch
+    // - CallSearchInstagramPage
+    // - CallSearchWebsiteFromForm
+    // - CallSearchTwitterXPostAndKeyword
+    // - CallRssWebsiteSearchNoRssUrl
+    // - CallRssWebsiteSearchWithRssUrl
+    // - CallSearchGoogleSyntech
+    //
+    // To use: connect MatchSources outputs to this node, then wire output to Merge
+    // =====================================================================
+
+    @node({
+        id: 'c5f8e3a2-9d7b-4c1e-8f6a-2b3d4e5f6a7b',
+        name: 'Content Sourcing Service',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.3,
+        position: [2064, 4400],
+        onError: 'continueErrorOutput',
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 5000,
+    })
+    ContentSourcingService = {
+        method: 'POST',
+        url: 'https://syntech-content-sourcing-production.up.railway.app/search',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpHeaderAuth',
+        sendHeaders: true,
+        headerParameters: {
+            parameters: [
+                {
+                    name: 'Content-Type',
+                    value: 'application/json',
+                },
+                {
+                    name: 'X-Request-Id',
+                    value: '={{ $execution.id }}-{{ $itemIndex }}',
+                },
+            ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={
+  "source_type": {{ JSON.stringify($json.property_source) }},
+  "url_or_keyword": {{ JSON.stringify($json.property_url || $json.url || $json.name) }},
+  "source_name": {{ JSON.stringify($json.name) }},
+  "source_category": {{ JSON.stringify($json.property_category || "") }},
+  "prompt": {{ JSON.stringify($json.property_keyword_category || null) }},
+  "test_mode": false
+}`,
+        options: {
+            response: {
+                response: {
+                    responseFormat: 'json',
+                },
+            },
+            timeout: 120000,
+        },
     };
 
     // =====================================================================
