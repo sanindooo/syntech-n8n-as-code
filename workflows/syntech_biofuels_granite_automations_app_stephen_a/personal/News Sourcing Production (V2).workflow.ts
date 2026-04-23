@@ -3213,6 +3213,12 @@ return $json.analysis`,
                     type: 'string',
                 },
                 {
+                    id: '7c3d2e91-1a4b-4e5c-9f8d-6b2e1d3f4a5c',
+                    name: 'source_category',
+                    value: "={{ $('Deduplicated Articles').item.json.source_category }}",
+                    type: 'string',
+                },
+                {
                     id: '61574df1-c16c-42df-9b9b-ebe428bd7eae',
                     name: 'mode',
                     value: "={{ $('Deduplicated Articles').item.json.mode }}",
