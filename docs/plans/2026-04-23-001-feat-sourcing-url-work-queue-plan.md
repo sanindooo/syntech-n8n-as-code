@@ -26,17 +26,73 @@ A single `/search` call today does URL discovery (Apify/Tavily/SERP/RSS) **and**
 
 The root cause is that extraction lives in the request path. The fix is to persist every URL before extracting, extract asynchronously, and reconcile into the existing downstream via a webhook — `(see origin: docs/brainstorms/2026-04-23-sourcing-url-work-queue-requirements.md#problem-frame)`.
 
+## Execution Decisions (2026-04-23 Q&A with Stephen)
+
+Locked-in choices that supersede earlier "Deferred to Implementation" notes in this plan:
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| D1 | **Ship the new `/search` response shape, no version discriminator.** `{status, queued, skipped_dedup}` is terminal. | Microservice is internal; all callers under Stephen's control. |
+| D2 | **Retire `/search/batch` entirely in this PR.** No alias. Useful logic folds into `/search`. | Simpler; no dual path. |
+| D3 | **Backoff schedule shortened**: `{1:10s, 2:30s, 3:2m, 4:10m, 5:30m}`. **`MAX_ATTEMPTS=6`** (env-configurable). Max span ~42min before dead-letter. | Same-day delivery SLA; sourced content decays fast. |
+| D4 | **All relevant knobs surfaced as env vars** — `MAX_ATTEMPTS`, `DISCOVERY_TIMEOUT_*` per source, `FLUSH_SETTLE_SEC`, `FLUSH_MAX_WAIT_SEC`, `DRAIN_POLL_INTERVAL_SEC`, `DRAIN_BATCH_SIZE`, `STALE_LOCK_SEC`, `STALE_LOCK_CHECK_INTERVAL_SEC`, `WEBHOOK_URL`, `WEBHOOK_BEARER_TOKEN`, `WEBHOOK_TIMEOUT_SEC`, `QUEUE_ENABLED`. | Runtime tuning without redeploy. |
+| D5 | **`QUEUE_ENABLED=true` by default.** The old synchronous path is removed with `/search/batch` retirement; the flag is a kill-switch only. | Queue is the product, not a feature flag. |
+| D6 | **Webhook envelope matches the legacy `/search/batch` response shape** — `{"status":"success", "articles":[...], "articles_returned":N, "sources_processed":N, "sources_failed":N, "errors":null}`. Additional optional metadata per the microservice needs. | Minimises n8n-side changes; Stephen's existing downstream expects this shape. |
+| D7 | **Ship `POST /admin/queue/requeue` in v1.** Bearer-gated. | High ops value, cheap to build. |
+| D8 | **Integration tests run against a Neon branch-per-PR.** Not testcontainers-postgres. | Production-parity `SKIP LOCKED` + pooler SSL behavior. |
+| D9 | **One PR per repo.** content-sourcing: `feat/url-work-queue`. n8n-as-code: `feat/sourcing-url-work-queue`. | Simple review. |
+| D10 | **Stephen publishes the n8n workflow himself.** Agent delivers the `.workflow.ts` edits + explicit step-by-step n8n UI instructions, then pauses before live tests. | Stephen's rule for this repo. |
+| D11 | **Webhook envelope spike before Phase 7 cutover.** Throwaway test POST against a temporary n8n Webhook trigger to confirm `$json.body.articles` unwraps cleanly. | Per origin doc Finding #11. |
+
+### Legacy Batch Request Shape (archived for reference, used by Phase 6 swap instructions)
+
+The current n8n `CallContentSourcingBatch` node sends:
+
+```jsonc
+{
+  "sources": [
+    {
+      "source_type": "...",
+      "url_or_keyword": "...",
+      "source_name": "...",
+      "source_category": "...",
+      "prompt": "...",
+      "additional_formats": "...",
+      "test_mode": true
+    }
+    // ...one entry per source...
+  ],
+  "max_concurrent_apify": 3
+}
+```
+
+**Post-cutover replacement** (see Phase 6): the same node loops per source and calls `POST /search` once per source with the item fields flat:
+
+```jsonc
+{
+  "source_type": "...",
+  "url_or_keyword": "...",
+  "source_name": "...",
+  "source_category": "...",
+  "prompt": "...",
+  "additional_formats": "...",
+  "test_mode": true
+}
+```
+
+Stephen makes this n8n UI change manually; agent provides the exact node config in Phase 6 deliverables.
+
 ## Proposed Solution
 
 **Port the classifier's outbox pattern to content-sourcing**, with a state-based flush predicate tuned for batch sourcing:
 
 1. New Neon table `content_sourcing.url_work_queue`. Every URL that enters the system is persisted with enough context to reconstruct an `ArticleResponse`. State machine: `queued` → `in_flight` → (`ready` | `waiting_retry` | `failed`); `ready` → `sent` (or back to `ready` on transient webhook failure).
 2. `POST /search` becomes discover-and-enqueue. Returns `{status: "queued", queued: N, skipped_dedup: M}` — no articles array.
-3. `/search/batch` keeps responding during a cutover window via a thin alias that delegates to `/search` (n8n workflow update lands in the same PR, but rolling deploy safety requires the alias).
+3. **`/search/batch` is retired entirely in this PR** (per D2). Any still-useful logic (e.g. per-source fanout, `max_concurrent_apify` cap) lives in `/search` or in the n8n side as a per-source loop.
 4. A `drain_loop` spawned from the FastAPI lifespan polls the queue every ~1s, claims batches with `FOR UPDATE SKIP LOCKED`, extracts in parallel, and routes outcomes through the state machine.
 5. **Flush predicate:** when `queued=0 AND in_flight=0 AND ready>0`, start a 30s settle timer. On expiry, flush all `ready` rows in a single POST to the n8n webhook. Re-entering the predicate cancels the timer. A hard `FLUSH_MAX_WAIT_SEC` ceiling forces a flush if persistent churn delays it.
 6. Webhook POST uses `httpBearerAuth` header matching existing n8n convention; 2xx → `sent`, transient → revert batch to `ready`, permanent → dead-letter batch to `failed`.
-7. Admin endpoints (`/admin/queue/status`, `/admin/queue/failed`) bearer-gated for ops introspection.
+7. Admin endpoints (`/admin/queue/status`, `/admin/queue/failed`, `/admin/queue/requeue`) bearer-gated for ops introspection.
 8. n8n workflow gets a new `Webhook` trigger node at `/webhook/flush-syntech-queue` that rejoins the canonical classifier → Notion → Slack chain; the Schedule trigger side becomes discovery-only.
 
 ## Technical Approach
@@ -261,14 +317,15 @@ RETURNING id, url, url_hash, source_type, source_name, source_category,
           request_context, attempts
 ```
 
-Backoff schedule (reused from classifier):
+Backoff schedule (tightened from the classifier's per Decision D3 — content decays fast; full span < 1h):
 
 ```python
 def compute_backoff_sec(attempts: int) -> int:
-    return {1: 10, 2: 30, 3: 120, 4: 600}.get(max(1, attempts), 3600)
+    # attempt 1 → 10s, 2 → 30s, 3 → 2min, 4 → 10min, 5+ → 30min
+    return {1: 10, 2: 30, 3: 120, 4: 600}.get(max(1, attempts), 1800)
 ```
 
-Dead-letter at `MAX_ATTEMPTS` (default **20**, tightened from classifier's 50 since sourced content degrades in value quickly — see Finding #7 and the repo-research report).
+Dead-letter at `MAX_ATTEMPTS` (default **6**, env-configurable via `MAX_ATTEMPTS`). Worst-case URL lifetime: `10 + 30 + 120 + 600 + 1800 + 1800 = 4360s ≈ 72min` before dead-letter — comfortably inside a daily schedule tick and below the classifier's 50-attempt marathon.
 
 ### Error Classification (Extraction)
 
@@ -283,9 +340,22 @@ Handlers **never raise** out of `extract_one`; every outcome is mapped determini
 
 ### Webhook Delivery
 
+Webhook payload shape — per Decision D6, matches the legacy `/search/batch` response envelope so the n8n downstream needs minimal rewiring:
+
 ```python
 async def flush_once(ready_rows: list[QueueRow]) -> FlushResult:
-    payload = {"articles": [row.article_response for row in ready_rows]}
+    payload = {
+        "status": "success",
+        "articles": [row.article_response for row in ready_rows],
+        "articles_returned": len(ready_rows),
+        # Source-level counters computed from the batch's distinct source_name values:
+        "sources_processed": len({r.source_name for r in ready_rows}),
+        "sources_failed": 0,  # Flush only fires on ready rows; failed rows already dead-lettered.
+        "errors": None,
+        # Queue-native metadata (new):
+        "flush_id": str(uuid4()),            # idempotency key for n8n side
+        "queue_row_ids": [r.id for r in ready_rows],
+    }
     async with httpx.AsyncClient(timeout=settings.webhook_timeout_sec) as client:
         try:
             resp = await client.post(
@@ -339,19 +409,24 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
   - Create `content_sourcing.url_work_queue` table with all columns from the ERD.
   - Create the four indices listed above.
   - Backfill-safe: no data migration needed (queue starts empty, per `(see origin: #scope-boundaries)`).
-- `app/config.py` additions (Pydantic `Settings`):
-  - `queue_enabled: bool = True`
-  - `flush_settle_sec: int = 30`
-  - `flush_max_wait_sec: int = 600`  (Finding #4 safety cap)
-  - `drain_poll_interval_sec: float = 1.0`
-  - `drain_batch_size: int = 10`
-  - `webhook_url: str | None = None`
-  - `webhook_bearer_token: SecretStr | None = None`
-  - `webhook_timeout_sec: int = 30`
-  - `max_attempts: int = 20`  (tightened from classifier's 50 per Finding #7)
-  - `stale_lock_sec: int = 600`
-  - `stale_lock_check_interval_sec: int = 60`
-  - `discovery_timeout_sec_rss: int = 30`, `..._website: int = 30`, `..._google: int = 30`, `..._keyword: int = 60`, `..._apify: int = 120`
+- `app/config.py` additions (Pydantic `Settings` — **all env-overridable** per Decision D4):
+  - `queue_enabled: bool = True`  (env `QUEUE_ENABLED`; kill-switch only since the sync path is gone — see D5)
+  - `flush_settle_sec: int = 30`  (env `FLUSH_SETTLE_SEC`)
+  - `flush_max_wait_sec: int = 600`  (env `FLUSH_MAX_WAIT_SEC`; Finding #4 safety cap)
+  - `drain_poll_interval_sec: float = 1.0`  (env `DRAIN_POLL_INTERVAL_SEC`)
+  - `drain_batch_size: int = 10`  (env `DRAIN_BATCH_SIZE`)
+  - `webhook_url: str | None = None`  (env `WEBHOOK_URL`)
+  - `webhook_bearer_token: SecretStr | None = None`  (env `WEBHOOK_BEARER_TOKEN`)
+  - `webhook_timeout_sec: int = 30`  (env `WEBHOOK_TIMEOUT_SEC`)
+  - `max_attempts: int = 6`  (env `MAX_ATTEMPTS`; tightened per Decision D3 — worst-case span ~72min)
+  - `stale_lock_sec: int = 600`  (env `STALE_LOCK_SEC`)
+  - `stale_lock_check_interval_sec: int = 60`  (env `STALE_LOCK_CHECK_INTERVAL_SEC`)
+  - Per-source discovery timeouts (all env-overridable):
+    - `discovery_timeout_sec_rss: int = 30`         (env `DISCOVERY_TIMEOUT_SEC_RSS`)
+    - `discovery_timeout_sec_website: int = 30`    (env `DISCOVERY_TIMEOUT_SEC_WEBSITE`)
+    - `discovery_timeout_sec_google: int = 30`     (env `DISCOVERY_TIMEOUT_SEC_GOOGLE`)
+    - `discovery_timeout_sec_keyword: int = 60`    (env `DISCOVERY_TIMEOUT_SEC_KEYWORD`)
+    - `discovery_timeout_sec_apify: int = 120`     (env `DISCOVERY_TIMEOUT_SEC_APIFY`, covers LinkedIn/Instagram/X)
 - `app/main.py` lifespan: spawn `drain_loop` as a task and cancel on exit (mirror classifier's `run_drainer_task()` context manager).
 - `app/queue/` new package (`__init__.py`, `schema.py` with Pydantic row models, `db.py` with claim/enqueue/dispatch SQL helpers, `drain.py` with the loop, `flush.py` with webhook delivery).
 - `AsyncConnectionPool` construction reviewed to include `check=check_connection, max_idle=120, max_lifetime=1800, reconnect_timeout=30` (per `syntech-article-classifier/docs/solutions/database-issues/neon-pooler-ssl-closed-psycopg-async-pool.md`). If already present, no change.
@@ -364,13 +439,13 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
 
 **Estimated effort**: ~0.5–1 day.
 
-#### Phase 2: Enqueue Path — Refactor `/search`, Retire `/search/batch` with Alias
+#### Phase 2: Enqueue Path — Refactor `/search`, Retire `/search/batch`
 
-**Deliverables**
+**Deliverables** (per Decisions D1 + D2 — no alias, no version discriminator)
 
 - `app/api/routes.py`:
-  - Refactor `search()` handler to: discovery (with per-source `asyncio.wait_for`) → normalize + dedup check against `seen_urls` **and** active `url_work_queue` rows → bulk enqueue → return `{status, queued, skipped_dedup}`. Drop the `articles` / `articles_returned` / `errors` path for the new shape (but retain the `SearchResponse` model's backward-compatible fields initially, with a `response_contract_version: Literal["v2"]` discriminator for future-proofing — **decide with user whether to bump the major version or just ship the new shape**).
-  - Convert `/search/batch` into a thin wrapper that delegates to `/search` per source and aggregates `queued`/`skipped_dedup`. Keeps n8n's current `CallContentSourcingBatch` node working during cutover (Finding #9). Alias is tagged `deprecated: true` in the OpenAPI schema and scheduled for removal in a follow-up PR after the n8n workflow change is validated (R7 is honored eventually, not day one).
+  - Refactor `search()` handler to: discovery (with per-source `asyncio.wait_for`) → normalize + dedup check against `seen_urls` **and** active `url_work_queue` rows → bulk enqueue → return `{status, queued, skipped_dedup}`. `SearchResponse` model is rewritten in-place with the new shape. No `response_contract_version` field.
+  - **Delete `/search/batch` endpoint entirely.** Any still-useful logic (per-source fanout concurrency cap, aggregate error handling, `max_concurrent_apify` gate) folds into `/search` — but note that in the new design each n8n loop iteration sends a single source, so per-source fanout only applies inside `/search` when one source discovers many URLs.
 - `app/queue/db.py`:
   - `check_url_seen_or_active(url_hashes) -> set[str]` — single query joining `seen_urls` and `url_work_queue` (any active state).
   - `enqueue_bulk(urls, request) -> int` — multi-row INSERT with `ON CONFLICT (url_hash) WHERE status IN (...) DO NOTHING` returning count.
@@ -381,7 +456,7 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
 
 - 100-URL fresh-keyword `/search` call returns `<2s` (no extraction in hot path).
 - Concurrent `/search` calls to the same source never double-enqueue (integration test: two parallel calls, assert sum of `queued + skipped_dedup` equals total unique URLs).
-- `/search/batch` alias produces the same aggregate counts a direct per-source `/search` would.
+- `/search/batch` is gone — `curl -X POST .../search/batch` returns 404.
 - Existing `seen_urls` dedup semantics unchanged — a URL already in `seen_urls` is still `skipped_dedup`, never enqueued.
 
 **Estimated effort**: ~1 day.
@@ -454,7 +529,7 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
 - `GET /admin/queue/failed?limit=50&include=ready_stuck` (bearer-gated):
   - Lists dead-lettered rows (URL, last_error, last_status_code, last_webhook_error, attempts, crash_recoveries, failed_at).
   - With `include=ready_stuck`, also lists `ready` rows with `last_webhook_error IS NOT NULL` so ops can spot webhook-retry churn (Finding #2).
-- `POST /admin/queue/requeue` (bearer-gated, optional for v1 — if cheap, ship it; else defer): accepts a row id and flips `failed → queued` with `attempts = 0`.
+- `POST /admin/queue/requeue` (bearer-gated, **ship in v1 per Decision D7**): accepts a row id (or list of ids) and flips `failed → queued` with `attempts = 0`, `next_attempt_at = now()`, clears `last_error`/`last_webhook_error`. Returns `{requeued: N}`.
 - Structured logs for every event listed in R19 (`queue_enqueue`, `queue_claim_batch`, `extract_success`, `extract_transient`, `extract_permanent`, `flush_predicate_true`, `flush_settle_started`, `flush_settle_cancelled`, `flush_fired`, `flush_fired_max_wait`, `webhook_post_ok`, `webhook_post_transient`, `webhook_post_permanent`, `stale_lock_recovered`). Each event carries `url_hash` (never raw URL), source context, counters.
 - **Defer** `/metrics` Prometheus endpoint (Finding #15) — log-driven for now; `/admin/queue/status` is sufficient for point-in-time visibility. Revisit once Grafana Cloud / Better Stack is wired to Railway.
 
@@ -468,16 +543,24 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
 
 #### Phase 6: n8n Workflow Integration + Scheduled-Branch Audit
 
+Per Decision D10, the agent **writes step-by-step n8n UI instructions** (in a new `docs/testing/queue-cutover/n8n-workflow-update-instructions.md` or inline in the PR description) and commits the matching `.workflow.ts` edits locally. **Stephen publishes the workflow in n8n UI himself**, then signals when live. The agent will only verify via the webhook spike (Phase 4) and the Phase 7 end-to-end test.
+
 **Deliverables**
 
 - `workflows/syntech_biofuels_granite_automations_app_stephen_a/personal/News Sourcing Production (V2).workflow.ts`:
-  - **Add** a `Webhook` trigger node named `FlushSyntechQueueWebhook` at path `/webhook/flush-syntech-queue`, bearer-auth-protected (header auth credential matching `WEBHOOK_BEARER_TOKEN`).
-  - **Wire** its output via a `SplitOut` node reading `$json.body.articles` (or `$json.articles` — confirmed during audit per Finding #11) into the same downstream the scheduled-branch used to enter at `SplitOutArticles` → `RemoveDuplicates3` → ... → classifier → Notion → Slack.
-  - **Audit** the scheduled-trigger branch nodes between `CallContentSourcing[Batch]` and where the webhook branch rejoins — report every node and verify it survives an empty `articles` array (per `(see origin: #r25)` + Finding #12). Candidates to inspect explicitly: `SplitOutArticles`, `RemoveDuplicates3`, `GetAllResults`, `RemoveDuplicates`, `IfFromForm`, `SelectFields`, `Filter`, `FinalInput`, `ClassifyViaRelevanceService`, `PerformFinalCalculation`, `ThresholdMet`. The scheduled branch effectively becomes "kick off discovery, do no per-article work."
-  - **Update** `CallContentSourcing[Batch]` node to handle the new response shape — it no longer produces `articles`, just `queued`/`skipped_dedup` counters. Downstream of the scheduled branch is now a Set/Log node (no classifier work).
-  - **Decide with user** during planning review: rename `CallContentSourcingBatch` → `CallContentSourcingDispatch` and point it at `/search` (looping per source) vs. keeping `/search/batch` indefinitely. Default: rename + point at `/search` in this PR.
-- Stephen manually publishes the workflow so the webhook URL activates (`(see origin: #r24)`); agent must **pause and signal** at the integration-test step rather than assume it's live.
-- Document the cutover order in this plan's Risk section.
+  - **Add** a `Webhook` trigger node named `FlushSyntechQueueWebhook` at path `/webhook/flush-syntech-queue`, bearer-auth-protected via `httpHeaderAuth` or n8n's built-in webhook authentication matching `WEBHOOK_BEARER_TOKEN`.
+  - **Wire** its output via a `SplitOut` node reading `$json.body.articles` (confirmed empirically during the Phase 4 webhook spike per Decision D11) into the same downstream the scheduled-branch used to enter at `SplitOutArticles` → `RemoveDuplicates3` → ... → classifier → Notion → Slack.
+  - **Audit** the scheduled-trigger branch nodes between `CallContentSourcing[Batch]` and where the webhook branch rejoins — agent produces a node-by-node report, verifies each survives an empty `articles` array. Candidates to inspect explicitly: `SplitOutArticles`, `RemoveDuplicates3`, `GetAllResults`, `RemoveDuplicates`, `IfFromForm`, `SelectFields`, `Filter`, `FinalInput`, `ClassifyViaRelevanceService`, `PerformFinalCalculation`, `ThresholdMet`. The scheduled branch becomes "kick off discovery, do no per-article work."
+  - **Rename + rewire** `CallContentSourcingBatch` → `CallContentSourcingDispatch`. Per Decision D2, `/search/batch` is gone, so the node now points at `POST /search`. In n8n, the scheduled branch's map-over-sources loop calls `/search` once per source with the flat body shape (see "Legacy Batch Request Shape" section near top of plan for the before/after bodies).
+  - The new response is `{status: "queued", queued: N, skipped_dedup: M}` — scheduled branch downstream just logs/aggregates counters.
+- **Stephen-executed steps** (agent provides explicit instructions, Stephen runs them in n8n UI):
+  1. Open `News Sourcing Production (V2)` in n8n.
+  2. Add `Webhook` trigger node with path `/webhook/flush-syntech-queue`, bearer auth configured to match `WEBHOOK_BEARER_TOKEN` Railway env var.
+  3. Wire webhook → `SplitOut` (field: `body.articles`) → existing classifier rejoin point.
+  4. Rename `CallContentSourcingBatch` node to `CallContentSourcingDispatch`, change endpoint to `/search`, update request body to the flat per-source shape.
+  5. Change the branch between the dispatch node and the classifier to a log/sink (no per-article work).
+  6. Publish the workflow.
+  7. Signal the agent that the webhook is live → agent runs Phase 7 cutover.
 
 **Success criteria**
 
@@ -491,19 +574,23 @@ On timeout the source is logged + skipped (no enqueue for it); `/search` still r
 
 **Deliverables**
 
-- **Deploy order (strict):**
-  1. **Microservice first**: Merge + deploy `syntech-content-sourcing` with the queue + `/search/batch` alias. Queue is `queue_enabled=false` initially → `/search` falls through to old synchronous behavior. Shadow-verify the queue code compiles, lifespan spawns the (no-op) drainer, migration applies.
-  2. **Flip queue on, still old `/search` contract**: Set `QUEUE_ENABLED=true` + `WEBHOOK_URL=<placeholder>` + `WEBHOOK_BEARER_TOKEN=<placeholder>`. Drainer runs but webhook posts 4xx — rows dead-letter to `failed`. Skip; do not do this step.
-     Actually: set `WEBHOOK_URL=""` to disable flushing entirely at this step; drainer accumulates `ready` rows without posting. Verify queue mechanics in production against real traffic.
-  3. **n8n workflow deploy**: Publish the updated workflow with the new webhook trigger. Stephen signals when live.
-  4. **Flip full cutover**: Set `WEBHOOK_URL` to the real n8n webhook, drain accumulated `ready` rows in one big flush, watch logs for one full scheduled tick end-to-end.
-  5. **Retire `/search/batch`**: After 1–2 successful daily ticks, remove the alias in a follow-up PR.
-- **Live verification run**: Manually trigger the n8n workflow. Confirm:
-  - `/search` returns `{queued, skipped_dedup}`.
-  - Drainer logs show claim → extract → ready → flush within expected latency.
-  - Webhook POST hits n8n, classifier chain runs, Notion/Slack show the expected articles.
-  - `/admin/queue/status` reflects steady state (no stuck `in_flight`, no piled-up `waiting_retry`).
-- **Rollback plan**: Set `QUEUE_ENABLED=false`. `/search` reverts to synchronous behavior (keep the old code path behind the flag until cleanup PR). n8n webhook trigger quietly receives no traffic; harmless.
+- **Deploy order (strict)** — simplified now that `/search/batch` is gone on merge (no alias to hold live):
+  1. **Stephen disables** `News Sourcing Production (V2)` in n8n UI so no scheduled run fires mid-cutover.
+  2. **Microservice deploy**: merge content-sourcing `feat/url-work-queue` PR. Railway auto-deploys with `QUEUE_ENABLED=true`, `WEBHOOK_URL=""` (empty → drainer accumulates `ready` rows without flushing), `WEBHOOK_BEARER_TOKEN=<set>`, `MAX_ATTEMPTS=6`, discovery timeouts at defaults.
+  3. **Shadow verify** queue mechanics in prod: run one manual `/search` call against a small source (e.g. Tavily with `test_mode=true`, 5 URLs). Check `/admin/queue/status` shows rows passing `queued → in_flight → ready`. Nothing is flushed.
+  4. **Stephen publishes** the n8n workflow update (Phase 6 Stephen-executed steps). Signals the agent.
+  5. **Agent sets** `WEBHOOK_URL=https://syntech-biofuels.granite-automations.app/webhook/flush-syntech-queue` via Railway → drainer's next tick fires the flush predicate → accumulated `ready` rows ship in one POST.
+  6. **Stephen re-enables** the scheduled trigger in n8n.
+  7. **Monitor** one full scheduled tick end-to-end. Confirm Notion rows appear, Slack traces fire, `/admin/queue/status` steady-state.
+- **Live verification run**: inside the first post-cutover scheduled tick, confirm:
+  - `/search` returns `{status:"queued", queued:N, skipped_dedup:M}` for each per-source loop iteration.
+  - Drainer logs show claim → extract → ready → flush within expected latency (<5min for a 100-URL discovery).
+  - Webhook POST hits n8n → `SplitOut` produces N items → classifier → Notion write succeeds.
+  - `/admin/queue/status` has no stuck `in_flight` (>`stale_lock_sec`) and no runaway `waiting_retry` (>10 rows).
+- **Rollback plan**: if the cutover tick fails badly:
+  1. Set `QUEUE_ENABLED=false` via Railway env. `/search` starts returning 503 (queue disabled, synchronous path is gone). **This is intentional** — we want alerts, not silent degradation.
+  2. If a rollback of code is needed: `gh pr revert` the queue PR. Railway redeploys prior image → `/search` returns to pre-queue synchronous behavior.
+  3. `url_work_queue` rows remain; on re-roll-forward they're drained normally. No data loss.
 
 **Success criteria**
 
@@ -592,7 +679,7 @@ When webhook fires:
 - [ ] `content_sourcing.url_work_queue` table exists with all columns, indices, and the active-state unique partial index `(see origin: #r1)`.
 - [ ] Rows transition through the 6-state machine exactly as specified `(see origin: #r2, #r3)`. `queued` and `waiting_retry` are distinguishable.
 - [ ] `POST /search` returns `{status: "queued", queued: N, skipped_dedup: M}` and does not extract articles `(see origin: #r4, #r5, #r6)`.
-- [ ] `POST /search/batch` works during cutover as a thin alias over `/search` and is tagged deprecated; scheduled for removal `(see origin: #r7)`.
+- [ ] `POST /search/batch` is removed entirely per Decision D2; returns 404. Any still-useful logic absorbed into `/search`.
 - [ ] Single `drain_loop` asyncio task spawned from FastAPI lifespan, cancelled cleanly on shutdown `(see origin: #r8)`.
 - [ ] Drainer claims batches via `FOR UPDATE SKIP LOCKED` and processes them in parallel within the batch `(see origin: #r8)`.
 - [ ] Stale-lock recovery at startup **and** on periodic in-loop ticks (every `stale_lock_check_interval_sec`) `(see origin: #r8)` + Finding #6.
@@ -602,7 +689,7 @@ When webhook fires:
 - [ ] Webhook POST to `WEBHOOK_URL` with `Authorization: Bearer <token>` header and `{articles: [ArticleResponse, ...]}` payload `(see origin: #r11, #r12)`.
 - [ ] 2xx → `sent`, transient → revert batch to `ready`, permanent → dead-letter `(see origin: #r14)`.
 - [ ] Straggler waves fire correctly as separate smaller flushes `(see origin: #r15)`.
-- [ ] Backoff schedule 10s / 30s / 2m / 10m / 1h, dead-letter at `MAX_ATTEMPTS` `(see origin: #r16)`. Default `MAX_ATTEMPTS=20` (tightened per Finding #7).
+- [ ] Backoff schedule 10s / 30s / 2m / 10m / 30m (env-tunable), dead-letter at `MAX_ATTEMPTS` env var. Default `MAX_ATTEMPTS=6` per Decision D3 — worst-case span ~72min.
 - [ ] Extraction outcomes classified explicitly per R17; never raise.
 - [ ] Enqueue-time dedup against `seen_urls` and active `url_work_queue` rows `(see origin: #r18)`; race-safe via unique partial index (Finding #3).
 - [ ] Structured log events for every R19-listed event.
@@ -708,7 +795,7 @@ When webhook fires:
 - **Target repo entry points**:
   - `app/main.py:20-78` — FastAPI app + lifespan (existing, drainer hooks here).
   - `app/api/routes.py:71-138` — `/search` handler to refactor.
-  - `app/api/routes.py:144-246` — `/search/batch` to alias and later retire.
+  - `app/api/routes.py:144-246` — `/search/batch` to delete entirely (per Decision D2).
   - `app/models.py:39-57` — `ArticleResponse` (contract preserved).
   - `app/models.py:10-67` — `SearchRequest` / `SearchResponse` (response shape changes).
   - `app/dedup.py:44-95` — `normalize_url` / `hash_url` (reuse).
@@ -743,7 +830,7 @@ When webhook fires:
 
 - **Research tools used**: Explore subagent (cross-repo code analysis), learnings-researcher (institutional knowledge), spec-flow-analyzer (gap detection across 16 findings).
 - **Human review required on**:
-  - The `/search/batch` alias retirement timing (deploy coordination).
+  - (resolved D2) `/search/batch` retired in-PR; no alias window.
   - The n8n Webhook trigger payload-shape decision (`{articles:[...]}` vs raw array — confirm empirically).
   - The `MAX_ATTEMPTS=20` tightening (accept for sourcing, or match classifier's 50 for consistency).
   - Integration-test infra choice (Neon test branch vs testcontainers).
