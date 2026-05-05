@@ -88,14 +88,20 @@ See `architecture-archive/` for previous versions.
                                               (shared database)
                                                        │
     ┌──────────────────────────────────────────────────┼───────────┐
-    │ syntech-email-digest ◄───── n8n hourly trigger   │           │
+    │ syntech-email-digest ◄───── n8n/API trigger      │           │
     │ (FastAPI)                                        │           │
     │                                                  │           │
     │ - reads articles from Postgres ◄─────────────────┘           │
     │ - groups by topic, clusters similar articles                 │
-    │ - generates LLM summaries                                    │
+    │ - generates LLM summaries (10 concurrent)                    │
     │ - sends HTML email via Gmail                                 │
-    │ - marks articles as sent                                     │
+    │ - batch marks articles as sent                               │
+    │                                                              │
+    │ API:                                                         │
+    │ - GET  /digest/pending  → {topic: count}                     │
+    │ - POST /digest/preview  → preview without sending            │
+    │ - POST /digest/send     → trigger digest                     │
+    │   body: {topics?: [...], dry_run?: bool}                     │
     └──────────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -145,6 +151,24 @@ class ArticleResponse:
     author: str | None          # author name (separate from source)
     published_at: datetime | None
 ```
+
+### Email Digest API (syntech-email-digest)
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/digest/pending` | GET | No | Check unsent article counts per topic |
+| `/digest/preview` | POST | Optional | Preview digest without sending |
+| `/digest/send` | POST | Optional | Trigger digest send |
+
+**Request body** (for `/digest/send` and `/digest/preview`):
+```json
+{
+  "topics": ["Biodiesel", "SAF"],  // optional: filter to topics
+  "dry_run": true                   // optional: generate summaries without sending
+}
+```
+
+**Authentication:** If `WEBHOOK_SECRET` env var is set, requires `X-API-Key` header.
 
 ### Key Invariants (Cross-Service)
 
