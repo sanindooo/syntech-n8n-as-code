@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : News Sourcing Production (V2)
-// Nodes   : 80  |  Connections: 91
+// Nodes   : 84  |  Connections: 94
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -54,15 +54,15 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // CheckSourcesExecuted               if
 // CheckSourcesExecuted1              if
 // Get15Ideas                         limit
-// SendAMessage1                      slack                      [creds]
-// SendAMessage                       slack                      [creds]
-// SendAMessage2                      slack                      [creds]
-// SendAMessage3                      slack                      [creds]
+// SendAMessage1                      slack                      [onError→regular] [creds]
+// SendAMessage                       slack                      [onError→regular] [creds]
+// SendAMessage2                      slack                      [onError→regular] [creds]
+// SendAMessage3                      slack                      [onError→regular] [creds]
 // AddContentWithDate1                httpRequest                [onError→out(1)] [creds]
-// SendAMessage4                      slack                      [creds]
+// SendAMessage4                      slack                      [onError→regular] [creds]
 // AddContentWithoutDate1             httpRequest                [onError→out(1)] [creds]
 // SendAMessage5                      slack                      [creds]
-// SendAMessage6                      slack                      [creds]
+// SendAMessage6                      slack                      [onError→regular] [creds]
 // ClassifyViaRelevanceService        httpRequest                [onError→out(1)] [creds] [retry]
 // PerformFinalCalculation            code
 // ThresholdMet                       if
@@ -86,7 +86,11 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // Get1000BestArticles                limit
 // MapToContentSourcing               set
 // SplitOutArticles                   splitOut
-// CallContentSourcingBatch           httpRequest                [creds] [executeOnce] [retry]
+// CallContentSourcing                httpRequest                [onError→out(1)] [creds] [retry]
+// ResumeContentQueue                 webhook                    [creds]
+// NoOperationDoNothing1              noOp
+// Error                              set
+// SendAMessage7                      slack                      [creds]
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -96,95 +100,99 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //        → Merge3
 //          → Limit1
 //            → MapToContentSourcing
-//              → CallContentSourcingBatch
-//                → SplitOutArticles
-//                  → RemoveDuplicates3
-//                    → GetAllResults
-//                      → RemoveDuplicates.in(1)
-//                        → IfFromForm
-//                          → SelectFields
-//                            → Filter
-//                              → SetGoogleSheetFields
-//                                → RemoveDuplicates1
-//                                  → AddContentIdeaToEvaluationTable1
-//                              → GetAllIdeasFromEvaluationTable2
-//                                → RemoveDuplicates1.in(1) (↩ loop)
-//                            → GetDefaultPlatformPrompts
-//                              → AggregatePlatformPrompts
-//                                → SetPlatformPrompts
-//                                  → ImageAndPlatformPrompts
-//                                    → DefaultArticleOutputs
-//                                      → FinalInput
-//                                        → IfFromForm1
-//                                          → IfTextLongerThan2000Chars
-//                                            → LoopOverItems
-//                                              → NoOperationDoNothing
-//                                             .out(1) → CheckSourcesExecuted1
-//                                                → MapDataForNotion1
-//                                                  → SplitsTextInSmallChuncks
-//                                                    → If2
-//                                                      → IfPublicationDate2
-//                                                        → AddContentWithDate
-//                                                          → SetArticleUrl
-//                                                            → Merge1
-//                                                              → AddContentToPost
-//                                                                → LoopOverItems (↩ loop)
-//                                                               .out(1) → SendAMessage2
-//                                                                  → LoopOverItems (↩ loop)
-//                                                         .out(1) → SendAMessage1
-//                                                            → LoopOverItems (↩ loop)
-//                                                       .out(1) → AddContentWithoutDate
-//                                                          → SetArticleUrl (↩ loop)
-//                                                         .out(1) → SendAMessage
-//                                                            → LoopOverItems (↩ loop)
-//                                                     .out(1) → Merge1.in(1) (↩ loop)
-//                                               .out(1) → FilterArticlesByTopic1
-//                                                  → MapDataForNotion1 (↩ loop)
-//                                                 .out(1) → SendAMessage6
-//                                                    → LoopOverItems (↩ loop)
-//                                           .out(1) → CheckSourcesExecuted
-//                                              → MapDataForNotion
-//                                                → IfPublicationDate
-//                                                  → AddContentWithDate1
-//                                                   .out(1) → SendAMessage3
-//                                                 .out(1) → AddContentWithoutDate1
-//                                                   .out(1) → SendAMessage4
-//                                             .out(1) → FilterArticlesByTopic
-//                                                → MapDataForNotion (↩ loop)
-//                                               .out(1) → SendAMessage5
-//                                         .out(1) → ValidContentOnlyScoreAbove2
-//                                            → IfTextLongerThan2000Chars (↩ loop)
-//                            → GetDefaultImagePrompts
-//                              → AggregateImagePrompts
-//                                → SetImagePrompts
-//                                  → ImageAndPlatformPrompts.in(1) (↩ loop)
-//                            → FinalInput.in(1) (↩ loop)
-//                         .out(1) → Aggregate
-//                            → SemanticKeywordDeduplication
-//                              → DeduplicatedArticles
-//                                → ClassifyViaRelevanceService
-//                                  → PerformFinalCalculation
-//                                    → ThresholdMet
-//                                      → Sort
-//                                        → Get1000BestArticles
-//                                          → Evaluation
-//                                            → SetOutputInEvaluationGoogleSheet
-//                                              → Evaluation1
-//                                           .out(1) → SelectFields (↩ loop)
-//                                     .out(1) → SelectFields1
-//                    → RemoveDuplicates (↩ loop)
+//              → CallContentSourcing
+//                → NoOperationDoNothing1
+//               .out(1) → Error
 //       .out(1) → Randomise
 //          → Get15Ideas
 //            → Merge3.in(1) (↩ loop)
 // RunEvaluation
 //    → GetAllSources1
 //      → MatchInputFormat
-//        → ClassifyViaRelevanceService (↩ loop)
+//        → ClassifyViaRelevanceService
+//          → PerformFinalCalculation
+//            → ThresholdMet
+//              → Sort
+//                → Get1000BestArticles
+//                  → Evaluation
+//                    → SetOutputInEvaluationGoogleSheet
+//                      → Evaluation1
+//                   .out(1) → SelectFields
+//                      → Filter
+//                        → SetGoogleSheetFields
+//                          → RemoveDuplicates1
+//                            → AddContentIdeaToEvaluationTable1
+//                        → GetAllIdeasFromEvaluationTable2
+//                          → RemoveDuplicates1.in(1) (↩ loop)
+//                      → GetDefaultPlatformPrompts
+//                        → AggregatePlatformPrompts
+//                          → SetPlatformPrompts
+//                            → ImageAndPlatformPrompts
+//                              → DefaultArticleOutputs
+//                                → FinalInput
+//                                  → IfFromForm1
+//                                    → IfTextLongerThan2000Chars
+//                                      → LoopOverItems
+//                                        → NoOperationDoNothing
+//                                       .out(1) → CheckSourcesExecuted1
+//                                          → MapDataForNotion1
+//                                            → SplitsTextInSmallChuncks
+//                                              → If2
+//                                                → IfPublicationDate2
+//                                                  → AddContentWithDate
+//                                                    → SetArticleUrl
+//                                                      → Merge1
+//                                                        → AddContentToPost
+//                                                          → LoopOverItems (↩ loop)
+//                                                         .out(1) → SendAMessage2
+//                                                            → LoopOverItems (↩ loop)
+//                                                   .out(1) → SendAMessage1
+//                                                      → LoopOverItems (↩ loop)
+//                                                 .out(1) → AddContentWithoutDate
+//                                                    → SetArticleUrl (↩ loop)
+//                                                   .out(1) → SendAMessage
+//                                                      → LoopOverItems (↩ loop)
+//                                               .out(1) → Merge1.in(1) (↩ loop)
+//                                         .out(1) → FilterArticlesByTopic1
+//                                            → MapDataForNotion1 (↩ loop)
+//                                           .out(1) → SendAMessage6
+//                                              → LoopOverItems (↩ loop)
+//                                     .out(1) → CheckSourcesExecuted
+//                                        → MapDataForNotion
+//                                          → IfPublicationDate
+//                                            → AddContentWithDate1
+//                                             .out(1) → SendAMessage3
+//                                           .out(1) → AddContentWithoutDate1
+//                                             .out(1) → SendAMessage4
+//                                       .out(1) → FilterArticlesByTopic
+//                                          → MapDataForNotion (↩ loop)
+//                                         .out(1) → SendAMessage5
+//                                   .out(1) → ValidContentOnlyScoreAbove2
+//                                      → IfTextLongerThan2000Chars (↩ loop)
+//                      → GetDefaultImagePrompts
+//                        → AggregateImagePrompts
+//                          → SetImagePrompts
+//                            → ImageAndPlatformPrompts.in(1) (↩ loop)
+//                      → FinalInput.in(1) (↩ loop)
+//             .out(1) → SelectFields1
+//         .out(1) → SendAMessage7
 // FormSubmission1
 //    → Sources
 //      → MapToContentSourcing (↩ loop)
 // ManuallyTriggerContentEngine
 //    → GetAllSources (↩ loop)
+// ResumeContentQueue
+//    → SplitOutArticles
+//      → RemoveDuplicates3
+//        → GetAllResults
+//          → RemoveDuplicates.in(1)
+//            → IfFromForm
+//              → SelectFields (↩ loop)
+//             .out(1) → Aggregate
+//                → SemanticKeywordDeduplication
+//                  → DeduplicatedArticles
+//                    → ClassifyViaRelevanceService (↩ loop)
+//        → RemoveDuplicates (↩ loop)
 //
 // AI CONNECTIONS
 // Evaluation1.uses({ ai_languageModel: OpenaiChatModel8 })
@@ -222,7 +230,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Schedule Trigger',
         type: 'n8n-nodes-base.scheduleTrigger',
         version: 1.2,
-        position: [720, 5200],
+        position: [2608, 4464],
     })
     ScheduleTrigger = {
         rule: {
@@ -239,7 +247,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Get All Sources',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [944, 5296],
+        position: [2832, 4560],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
     })
     GetAllSources = {
@@ -271,7 +279,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Get All Results',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [3216, 5568],
+        position: [3248, 5552],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
         alwaysOutputData: true,
         executeOnce: true,
@@ -295,7 +303,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Remove Duplicates',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [3440, 5504],
+        position: [3472, 5488],
     })
     RemoveDuplicates = {
         mode: 'combine',
@@ -318,7 +326,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'If High Priority',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [1136, 5296],
+        position: [3024, 4560],
     })
     IfHighPriority = {
         conditions: {
@@ -350,7 +358,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Randomise',
         type: 'n8n-nodes-base.sort',
         version: 1,
-        position: [1360, 5376],
+        position: [3248, 4640],
     })
     Randomise = {
         type: 'random',
@@ -361,7 +369,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Match Input Format',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [4336, 5696],
+        position: [4368, 5680],
         executeOnce: true,
     })
     MatchInputFormat = {
@@ -418,7 +426,7 @@ export class NewsSourcingProductionV2Workflow {
         name: 'Run Evaluation',
         type: 'n8n-nodes-base.evaluationTrigger',
         version: 4.6,
-        position: [3888, 5696],
+        position: [3920, 5680],
         credentials: { googleSheetsOAuth2Api: { id: 'OSB0yUnhxYm2AAN5', name: 'Stephen Google Sheets account' } },
     })
     RunEvaluation = {
@@ -639,8 +647,8 @@ return result;`,
         fields: {
             values: [
                 {
-                    name: 'url',
-                    stringValue: '={{ $json.url }}',
+                    name: 'id',
+                    stringValue: '={{ $json.id }}',
                 },
             ],
         },
@@ -663,8 +671,8 @@ return result;`,
         resource: 'block',
         blockId: {
             __rl: true,
-            value: '={{ $json.url }}',
-            mode: 'url',
+            value: '={{ $json.id }}',
+            mode: 'id',
         },
         blockUi: {
             blockValues: [
@@ -680,7 +688,7 @@ return result;`,
         name: 'sources',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [2032, 5616],
+        position: [3920, 4880],
     })
     Sources = {
         assignments: {
@@ -740,7 +748,7 @@ return result;`,
         name: 'Merge3',
         type: 'n8n-nodes-base.merge',
         version: 3.2,
-        position: [1808, 5296],
+        position: [3696, 4560],
     })
     Merge3 = {};
 
@@ -750,7 +758,7 @@ return result;`,
         name: 'Form Submission1',
         type: 'n8n-nodes-base.webhook',
         version: 2.1,
-        position: [1808, 5616],
+        position: [3696, 4880],
     })
     FormSubmission1 = {
         httpMethod: 'POST',
@@ -763,7 +771,7 @@ return result;`,
         name: 'If From Form',
         type: 'n8n-nodes-base.if',
         version: 2.2,
-        position: [3664, 5504],
+        position: [3696, 5488],
     })
     IfFromForm = {
         conditions: {
@@ -834,7 +842,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
                 {
                     id: '0c470796-e8e2-4605-a6af-9e8236d9635c',
                     name: 'search_query',
-                    value: "={{ $('Deduplicated Articles').item.json.search_query || $('Remove Duplicates').item.json.search_query }}",
+                    value: "={{ $('Deduplicated Articles').item.json.search_query }}",
                     type: 'string',
                 },
                 {
@@ -865,6 +873,18 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
                     id: 'f3e017bd-5f4f-4265-ba02-9280077f42a6',
                     name: 'source_name',
                     value: "={{ $('Deduplicated Articles').item.json.source_name || $('Remove Duplicates').item.json.source_name }}",
+                    type: 'string',
+                },
+                {
+                    id: 'f4ed6cb7-a5a4-401e-8a52-d81a8e11bea5',
+                    name: 'author',
+                    value: "={{ $('Deduplicated Articles').item.json.author }}",
+                    type: 'string',
+                },
+                {
+                    id: 'b7009aa6-4950-49c3-99b4-9dac161d2124',
+                    name: 'source_category',
+                    value: "={{ $('Deduplicated Articles').item.json.source_category }}",
                     type: 'string',
                 },
                 {
@@ -1030,7 +1050,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Remove Duplicates3',
         type: 'n8n-nodes-base.removeDuplicates',
         version: 2,
-        position: [2992, 5504],
+        position: [3024, 5488],
     })
     RemoveDuplicates3 = {
         compare: 'selectedFields',
@@ -1095,7 +1115,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Limit1',
         type: 'n8n-nodes-base.limit',
         version: 1,
-        position: [2032, 5296],
+        position: [3920, 4560],
     })
     Limit1 = {
         maxItems: 1000,
@@ -1106,7 +1126,7 @@ Url \${index + 1}: \${article.url}\`).join('\\n') : 'No Duplicate Articles'}}`,
         name: 'Get All Sources1',
         type: 'n8n-nodes-base.notion',
         version: 2.2,
-        position: [4112, 5696],
+        position: [4144, 5680],
         credentials: { notionApi: { id: 'k0ZwGrqySi9Wayf7', name: 'Stephen Notion account' } },
     })
     GetAllSources1 = {
@@ -1340,7 +1360,7 @@ Do not include any reasoning, explanation, or additional text.
         name: 'Manually Trigger Content Engine',
         type: 'n8n-nodes-base.webhook',
         version: 2.1,
-        position: [720, 5392],
+        position: [2608, 4656],
     })
     ManuallyTriggerContentEngine = {
         httpMethod: 'POST',
@@ -1806,7 +1826,7 @@ Do not include any reasoning, explanation, or additional text.
         name: 'Sticky Note6',
         type: 'n8n-nodes-base.stickyNote',
         version: 1,
-        position: [2944, 5328],
+        position: [2976, 5312],
     })
     StickyNote6 = {
         content: '## Remove Duplicates',
@@ -2325,7 +2345,7 @@ Do not include any reasoning, explanation, or additional text.
         name: 'Get 15 Ideas',
         type: 'n8n-nodes-base.limit',
         version: 1,
-        position: [1584, 5376],
+        position: [3472, 4640],
     })
     Get15Ideas = {
         maxItems: 15,
@@ -2339,6 +2359,7 @@ Do not include any reasoning, explanation, or additional text.
         version: 2.3,
         position: [10176, 4880],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage1 = {
         select: 'channel',
@@ -2356,9 +2377,9 @@ Do not include any reasoning, explanation, or additional text.
 - *Timestamp:* {{ $now.toFormat('dd-MM-yyyy HH:mm:ss') }}
 - *Issue:* News sourcing workflow skipped some news
 - *Article:* 
-Title: {{ $('Map Data for Notion1').item.json.title }}
-Url: {{ $('Map Data for Notion1').item.json.url }}
-Summary: {{ $('Map Data for Notion1').item.json.summary }}
+Title: {{ $('Map Data for Notion1').first().json.title }}
+Url: {{ $('Map Data for Notion1').first().json.url }}
+Summary: {{ $('Map Data for Notion1').first().json.summary }}
 
 *Next Steps:* Please review the workflow and retry the execution.
 Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}|View Execution>`,
@@ -2376,6 +2397,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         version: 2.3,
         position: [10176, 5264],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage = {
         select: 'channel',
@@ -2393,9 +2415,9 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
 - *Timestamp:* {{ $now.toFormat('dd-MM-yyyy HH:mm:ss') }}
 - *Issue:* News sourcing workflow skipped some news
 - *Article:* 
-Title: {{ $('Map Data for Notion1').item.json.title }}
-Url: {{ $('Map Data for Notion1').item.json.url }}
-Summary: {{ $('Map Data for Notion1').item.json.summary }}
+Title: {{ $('Map Data for Notion1').first().json.title }}
+Url: {{ $('Map Data for Notion1').first().json.url }}
+Summary: {{ $('Map Data for Notion1').first().json.summary }}
 
 *Next Steps:* Please review the workflow and retry the execution.
 Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}|View Execution>`,
@@ -2413,6 +2435,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         version: 2.3,
         position: [10848, 5488],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage2 = {
         select: 'channel',
@@ -2429,9 +2452,9 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
 - *Error Message:* {{ $json.error }}
 - *Timestamp:* {{ $now.toFormat('dd-MM-yyyy HH:mm:ss') }}
 - *Article:* 
-Title: {{ $('Map Data for Notion1').item.json.title }}
-Url: {{ $('Map Data for Notion1').item.json.url }}
-Summary: {{ $('Map Data for Notion1').item.json.summary }}
+Title: {{ $('Map Data for Notion1').first().json.title }}
+Url: {{ $('Map Data for Notion1').first().json.url }}
+Summary: {{ $('Map Data for Notion1').first().json.summary }}
 
 *Next Steps:* Please review the workflow and retry the execution.
 Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}|View Execution>`,
@@ -2449,6 +2472,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         version: 2.3,
         position: [9504, 5936],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage3 = {
         select: 'channel',
@@ -2715,6 +2739,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         version: 2.3,
         position: [9504, 6128],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage4 = {
         select: 'channel',
@@ -3014,6 +3039,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         version: 2.3,
         position: [9056, 5472],
         credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+        onError: 'continueRegularOutput',
     })
     SendAMessage6 = {
         select: 'channel',
@@ -3047,7 +3073,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Classify via Relevance Service',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
-        position: [4592, 5328],
+        position: [4624, 5312],
         credentials: { httpBearerAuth: { id: 'rTkgjtU8QIYs0nXm', name: 'Syntech Relevance Classifier Bearer' } },
         onError: 'continueErrorOutput',
         retryOnFail: true,
@@ -3075,20 +3101,27 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         sendBody: true,
         specifyBody: 'json',
         jsonBody: `={
-            "title":            {{ JSON.stringify($('Deduplicated Articles').item.json.title) }},
-            "content":          {{ JSON.stringify($('Deduplicated Articles').item.json.content) }},
-            "url":               {{ JSON.stringify($('Deduplicated Articles').item.json.url) }},
-            "source":           {{ JSON.stringify($('Deduplicated Articles').item.json.source) }},
-            "source_category":  {{ JSON.stringify($('Deduplicated Articles').item.json.source_category || "") }},
-            "summary":          {{ JSON.stringify($('Deduplicated Articles').item.json.summary || "") }}
-        }`,
+  "title":{{ JSON.stringify($('Deduplicated Articles').item.json.title) }},
+  "content":{{ JSON.stringify($('Deduplicated Articles').item.json.content) }},
+  "url":{{ JSON.stringify($('Deduplicated Articles').item.json.url) }},
+  "source":{{ JSON.stringify($('Deduplicated Articles').item.json.source) }},
+  "source_category":{{ JSON.stringify($('Deduplicated Articles').item.json.source_category || "") }},
+  "summary":{{ JSON.stringify($('Deduplicated Articles').item.json.summary || "") }},
+  "author":{{ JSON.stringify($('Deduplicated Articles').item.json.author ?? null) }}
+}`,
         options: {
+            batching: {
+                batch: {
+                    batchSize: 10,
+                    batchInterval: 3000,
+                },
+            },
             response: {
                 response: {
                     responseFormat: 'json',
                 },
             },
-            timeout: 15000,
+            timeout: 180000,
         },
     };
 
@@ -3097,7 +3130,7 @@ Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workfl
         name: 'Perform Final Calculation',
         type: 'n8n-nodes-base.code',
         version: 2,
-        position: [4848, 5312],
+        position: [4848, 5200],
     })
     PerformFinalCalculation = {
         mode: 'runOnceForEachItem',
@@ -3115,7 +3148,7 @@ return $json.analysis`,
         name: 'Threshold Met?',
         type: 'n8n-nodes-base.if',
         version: 2.3,
-        position: [5072, 5312],
+        position: [5072, 5200],
     })
     ThresholdMet = {
         conditions: {
@@ -3147,7 +3180,7 @@ return $json.analysis`,
         name: 'select fields1',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [5296, 5392],
+        position: [5296, 5280],
     })
     SelectFields1 = {
         assignments: {
@@ -3213,12 +3246,6 @@ return $json.analysis`,
                     type: 'string',
                 },
                 {
-                    id: '7c3d2e91-1a4b-4e5c-9f8d-6b2e1d3f4a5c',
-                    name: 'source_category',
-                    value: "={{ $('Deduplicated Articles').item.json.source_category }}",
-                    type: 'string',
-                },
-                {
                     id: '61574df1-c16c-42df-9b9b-ebe428bd7eae',
                     name: 'mode',
                     value: "={{ $('Deduplicated Articles').item.json.mode }}",
@@ -3240,7 +3267,7 @@ return $json.analysis`,
         name: 'Aggregate',
         type: 'n8n-nodes-base.aggregate',
         version: 1,
-        position: [3888, 5328],
+        position: [3920, 5312],
     })
     Aggregate = {
         aggregate: 'aggregateAllItemData',
@@ -3253,7 +3280,7 @@ return $json.analysis`,
         name: 'Semantic Keyword Deduplication',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.4,
-        position: [4112, 5328],
+        position: [4144, 5312],
         retryOnFail: true,
         waitBetweenTries: 5000,
     })
@@ -3281,7 +3308,7 @@ return $json.analysis`,
         name: 'Sticky Note1',
         type: 'n8n-nodes-base.stickyNote',
         version: 1,
-        position: [3872, 5152],
+        position: [3904, 5136],
     })
     StickyNote1 = {
         content: `## Semantic Deduplication
@@ -3295,7 +3322,7 @@ This performs semantic deduplication, which uses keywords to create content clus
         name: 'Deduplicated Articles',
         type: 'n8n-nodes-base.splitOut',
         version: 1,
-        position: [4336, 5328],
+        position: [4368, 5312],
     })
     DeduplicatedArticles = {
         fieldToSplitOut: 'selected_articles',
@@ -3504,7 +3531,7 @@ This add default content and image types to each article
     })
     FilterArticlesByTopic = {
         method: 'POST',
-        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        url: 'https://syntech-article-processor-production.up.railway.app/classify',
         authentication: 'genericCredentialType',
         genericAuthType: 'httpBearerAuth',
         sendBody: true,
@@ -3530,7 +3557,7 @@ This add default content and image types to each article
     })
     FilterArticlesByTopic1 = {
         method: 'POST',
-        url: 'https://syntech-article-classifier-production.up.railway.app/classify',
+        url: 'https://syntech-article-processor-production.up.railway.app/classify',
         authentication: 'genericCredentialType',
         genericAuthType: 'httpBearerAuth',
         sendBody: true,
@@ -3555,7 +3582,7 @@ This add default content and image types to each article
         name: 'Map To Content Sourcing',
         type: 'n8n-nodes-base.set',
         version: 3.4,
-        position: [2304, 5504],
+        position: [4192, 4768],
     })
     MapToContentSourcing = {
         assignments: {
@@ -3599,7 +3626,7 @@ This add default content and image types to each article
                 {
                     id: 'cs-test-mode',
                     name: 'test_mode',
-                    value: '={{ true }}',
+                    value: '={{ false }}',
                     type: 'boolean',
                 },
             ],
@@ -3612,45 +3639,167 @@ This add default content and image types to each article
         name: 'Split Out Articles',
         type: 'n8n-nodes-base.splitOut',
         version: 1,
-        position: [2784, 5504],
+        position: [2816, 5488],
     })
     SplitOutArticles = {
-        fieldToSplitOut: 'articles',
+        fieldToSplitOut: 'body.articles',
         options: {},
     };
 
     @node({
         id: 'bc8ebb5e-e97a-4b89-b5be-e1b3d34b1fdf',
-        name: 'Call Content Sourcing Batch',
+        name: 'Call Content Sourcing',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.4,
-        position: [2544, 5504],
+        position: [4432, 4768],
         credentials: { httpBearerAuth: { id: 'e0bBYiHsQNeVlYmn', name: 'Syntech Content Sourcing Bearer' } },
-        executeOnce: true,
+        onError: 'continueErrorOutput',
+        executeOnce: false,
         retryOnFail: true,
         waitBetweenTries: 5000,
     })
-    CallContentSourcingBatch = {
+    CallContentSourcing = {
         method: 'POST',
-        url: 'https://syntech-content-sourcing-production.up.railway.app/search/batch',
+        url: 'https://syntech-content-sourcing-production.up.railway.app/search',
         authentication: 'genericCredentialType',
         genericAuthType: 'httpBearerAuth',
         sendBody: true,
         specifyBody: 'json',
-        jsonBody: `={
-  "sources": {{ JSON.stringify($input.all().map(item => ({
-    source_type: item.json.source_type,
-    url_or_keyword: item.json.url_or_keyword,
-    source_name: item.json.source_name,
-    source_category: item.json.source_category,
-    prompt: item.json.prompt,
-    additional_formats: item.json.additional_formats,
-    test_mode: item.json.test_mode
-  }))) }},
-  "max_concurrent_apify": 3
-}`,
+        jsonBody: `={{JSON.stringify(
+  {
+    source_type:$json.source_type,
+    url_or_keyword:$json.url_or_keyword,
+    source_name:$json.source_name,
+    source_category:$json.source_category,
+    prompt:$json.prompt,
+    additional_formats:$json.additional_formats,
+    test_mode:$json.test_mode
+  }
+)}}`,
         options: {
-            timeout: 300000,
+            batching: {
+                batch: {
+                    batchSize: 3,
+                    batchInterval: 2000,
+                },
+            },
+            timeout: 180000,
+        },
+    };
+
+    @node({
+        id: '3a13744a-4692-44fc-a6d0-f0ce3d08dd86',
+        webhookId: 'bbfd5027-a96f-4ec1-bc49-1b612b0f18ad',
+        name: 'Resume Content Queue',
+        type: 'n8n-nodes-base.webhook',
+        version: 2.1,
+        position: [2592, 5488],
+        credentials: { httpHeaderAuth: { id: 'voWjuyaflZP6RgSr', name: 'Syntech Content Webhook Bearer' } },
+    })
+    ResumeContentQueue = {
+        httpMethod: 'POST',
+        path: 'flush-syntech-queue',
+        authentication: 'headerAuth',
+        options: {},
+    };
+
+    @node({
+        id: 'ebeffc42-2974-4725-84e9-1969c784f4fb',
+        name: 'No Operation, do nothing1',
+        type: 'n8n-nodes-base.noOp',
+        version: 1,
+        position: [4640, 4672],
+    })
+    NoOperationDoNothing1 = {};
+
+    @node({
+        id: '2e9ad1a5-cdf1-4e2e-9046-e180c129263d',
+        name: 'Error',
+        type: 'n8n-nodes-base.set',
+        version: 3.4,
+        position: [4640, 4864],
+    })
+    Error = {
+        assignments: {
+            assignments: [
+                {
+                    id: '8b991a0d-d332-4593-acef-1af2aaf9bdb2',
+                    name: 'error',
+                    value: '={{ $json.error.message }}',
+                    type: 'string',
+                },
+                {
+                    id: 'a84fbebe-7e0c-4d06-8e6c-cd8799688ce8',
+                    name: 'source_type',
+                    value: '={{ $json.source_type }}',
+                    type: 'string',
+                },
+                {
+                    id: '49d88b45-d93e-47e7-9ee5-33a6c1bc2a3a',
+                    name: 'url_or_keyword',
+                    value: '={{ $json.url_or_keyword }}',
+                    type: 'string',
+                },
+                {
+                    id: 'c4366a40-2c08-4662-9224-43950f5cf6d2',
+                    name: 'source_name',
+                    value: '={{ $json.source_name }}',
+                    type: 'string',
+                },
+                {
+                    id: 'afa82a0e-3262-43a5-adc5-83e5a02883c4',
+                    name: 'source_category',
+                    value: '={{ $json.source_category }}',
+                    type: 'string',
+                },
+                {
+                    id: '9c636a6d-cdc4-48be-9fed-32518707590b',
+                    name: 'error.code',
+                    value: '={{ $json.error.code }}',
+                    type: 'string',
+                },
+                {
+                    id: '57ae904c-c298-4770-9f9e-954856779182',
+                    name: 'error.status',
+                    value: '={{ $json.error.status }}',
+                    type: 'number',
+                },
+            ],
+        },
+        options: {},
+    };
+
+    @node({
+        id: '4dd78286-a61d-4032-89ef-e90ffcaa8bbd',
+        webhookId: 'd98789a2-b2b3-4f8f-a4fb-e226aa1adb2e',
+        name: 'Send a message7',
+        type: 'n8n-nodes-base.slack',
+        version: 2.3,
+        position: [4848, 5424],
+        credentials: { slackApi: { id: 'hndVCHiq0HgMBAh3', name: 'Stephen Slack account' } },
+    })
+    SendAMessage7 = {
+        select: 'channel',
+        channelId: {
+            __rl: true,
+            value: 'C09V1831FN2',
+            mode: 'list',
+            cachedResultName: 'syntech-n8n-error-tracker',
+        },
+        text: `= *Classification Workflow Execution Error* ⚠️
+
+- *Workflow Name:* News Sourcing Production (V2)
+- *Error Node:* Classify via Relevance Service
+- *Error Message:* {{ $json.error }}
+- *Timestamp:* {{ $now.toFormat('dd-MM-yyyy HH:mm:ss') }}
+- *Article:*
+Title: {{ $('Deduplicated Articles').item.json.title }}
+Url:{{ $('Deduplicated Articles').item.json.url }}
+
+Workflow Execution: <https://syntech.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}|View Execution>`,
+        otherOptions: {
+            includeLinkToWorkflow: false,
+            unfurl_links: true,
         },
     };
 
@@ -3728,6 +3877,7 @@ This add default content and image types to each article
         this.SendAMessage2.out(0).to(this.LoopOverItems.in(0));
         this.DeduplicatedArticles.out(0).to(this.ClassifyViaRelevanceService.in(0));
         this.ClassifyViaRelevanceService.out(0).to(this.PerformFinalCalculation.in(0));
+        this.ClassifyViaRelevanceService.out(1).to(this.SendAMessage7.in(0));
         this.PerformFinalCalculation.out(0).to(this.ThresholdMet.in(0));
         this.ThresholdMet.out(0).to(this.Sort.in(0));
         this.ThresholdMet.out(1).to(this.SelectFields1.in(0));
@@ -3748,9 +3898,11 @@ This add default content and image types to each article
         this.FilterArticlesByTopic1.out(1).to(this.SendAMessage6.in(0));
         this.MatchInputFormat.out(0).to(this.ClassifyViaRelevanceService.in(0));
         this.Get1000BestArticles.out(0).to(this.Evaluation.in(0));
-        this.MapToContentSourcing.out(0).to(this.CallContentSourcingBatch.in(0));
+        this.MapToContentSourcing.out(0).to(this.CallContentSourcing.in(0));
         this.SplitOutArticles.out(0).to(this.RemoveDuplicates3.in(0));
-        this.CallContentSourcingBatch.out(0).to(this.SplitOutArticles.in(0));
+        this.CallContentSourcing.out(0).to(this.NoOperationDoNothing1.in(0));
+        this.CallContentSourcing.out(1).to(this.Error.in(0));
+        this.ResumeContentQueue.out(0).to(this.SplitOutArticles.in(0));
 
         this.Evaluation1.uses({
             ai_languageModel: this.OpenaiChatModel8.output,
