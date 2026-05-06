@@ -1,8 +1,8 @@
 {
   "workflows": {
     "UzEv74M2D2q4z0Zx": {
-      "lastSyncedHash": "ecfc9ea0b0e61d3c08c9ef8e92d7d8c5280d031e8bbd5847698671d77c65e08c",
-      "lastSyncedAt": "2026-05-05T06:59:11.217Z",
+      "lastSyncedHash": "aeabc665f28918b32b64951c6ae06652d722aaa2cc9becba0d908072763eb39a",
+      "lastSyncedAt": "2026-05-06T09:35:10.481Z",
       "filename": "News Sourcing Production (V2).workflow.ts"
     },
     "iMG6XApQjSxVQxIe": {
@@ -34,6 +34,21 @@
       "lastSyncedHash": "5cda1dcfbf670e4996c0b34f151c78eae914d525b7486da2e82131d4aeb7c1f6",
       "lastSyncedAt": "2026-04-13T11:26:09.563Z",
       "filename": "Tavily Keyword Search.workflow.ts"
+    },
+    "QJa8YNLn4vHITmwY": {
+      "lastSyncedHash": "ba065411356f075da1af3836764745b8a4a5870ef04eb943846973e557713d9c",
+      "lastSyncedAt": "2026-04-30T09:05:52.374Z",
+      "filename": "Email Content Feed.workflow.ts"
+    },
+    "XO9Or6DUoTqXgAA5": {
+      "lastSyncedHash": "e5aaef111bbda3c9ce5717cf959e9c334f20f416c64a3438902e8681937faf1b",
+      "lastSyncedAt": "2026-05-06T09:39:50.380Z",
+      "filename": "Syntech Mention Monitor.workflow.ts"
+    },
+    "xMber2oB93RuRWim": {
+      "lastSyncedHash": "819467a87a4230c9f42f6384ee97a314aa10a09c10b187438f7db671e8aba483",
+      "lastSyncedAt": "2026-05-06T11:34:20.206Z",
+      "filename": "Process Articles.workflow.ts"
     }
   }
 }
