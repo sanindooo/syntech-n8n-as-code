@@ -23,14 +23,19 @@ See `architecture-archive/` for previous versions.
                               n8n Orchestration
                              (syntech-n8n-as-code)
                                      │
-                    ┌────────────────┴────────────────┐
-                    │                                  │
-                    ▼                                  ▼
-    ┌──────────────────────────┐          Schedule/Webhook Trigger
-    │   /search (per source)   │
-    └────────────┬─────────────┘
-                 │
-                 ▼
+          ┌──────────────────────────┼──────────────────────────┐
+          │                          │                          │
+          ▼                          ▼                          ▼
+┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
+│ News Sourcing     │    │ Syntech Mention   │    │ Process Articles  │
+│ Production (V2)   │    │ Monitor           │    │ (Drainer)         │
+│ 14 nodes          │    │ 8 nodes           │    │ 52 nodes          │
+│ Schedule: 8am     │    │ Schedule: 8am     │    │ Webhook trigger   │
+└─────────┬─────────┘    └─────────┬─────────┘    └─────────┬─────────┘
+          │                        │                        │
+          │ Notion sources         │ Notion sources         │ receives batches
+          │ (News category)        │ (Mention category)     │ from content-sourcing
+          ▼                        ▼                        │
     ┌──────────────────────────────────────────────────────────────┐
     │            syntech-content-sourcing (FastAPI)                │
     │  ┌─────────────────────────────────────────────────────┐     │
@@ -55,53 +60,63 @@ See `architecture-archive/` for previous versions.
                                │  POST /webhook/flush-syntech-queue
                                ▼
     ┌──────────────────────────────────────────────────────────────┐
-    │                  n8n Drainer Workflow                        │
+    │              Process Articles (n8n Drainer Workflow)         │
     │  - receives batch of extracted articles                      │
-    │  - loops through articles                                    │
-    │  - calls relevance classifier, then article processor        │
-    └──────────────────────────┬───────────────────────────────────┘
+    │  - routes by source_category:                                │
+    │                                                              │
+    │    ┌────────────────────┐    ┌────────────────────┐         │
+    │    │ source_category    │    │ source_category    │         │
+    │    │ = "Mention"        │    │ ≠ "Mention" (News) │         │
+    │    └─────────┬──────────┘    └─────────┬──────────┘         │
+    │              │                          │                    │
+    │              ▼                          ▼                    │
+    │    POST /mentions/analyze      POST /classify → /process    │
+    └──────────────┬───────────────────────────┬───────────────────┘
+                   │                           │
+                   │                           │
+                   ▼                           ▼
+    ┌────────────────────────────────────────────────────────────┐
+    │ syntech-article-processor (FastAPI)                        │
+    │                                                            │
+    │ POST /process (News)              POST /mentions/analyze   │
+    │ - extracts metadata               - sentiment analysis     │
+    │ - relevance already classified    - GPT-4o-mini (0-5 scale)│
+    │ - persists to articles table      - persists to mentions   │
+    │                                     + mention_enrichments  │
+    │                                                            │
+    │ ──────────────── Shared Neon Postgres ─────────────────────│
+    │   articles table    │    mentions + mention_enrichments    │
+    └────────────────────────────────────────────────────────────┘
                                │
-        ┌──────────────────────┴──────────────────────┐
-        │                                              │
-        │  POST /classify                              │
-        ▼                                              │
-    ┌────────────────────────────────────┐             │
-    │ syntech-biofuel-relevance-         │             │
-    │ classifier (FastAPI)               │             │
-    │                                    │             │
-    │ - determines biofuel relevance     │             │
-    │ - cascade: fast model + Claude     │             │
-    │ - returns relevance score/decision │             │
-    └────────────────────┬───────────────┘             │
-                         │                              │
-                         │  (if relevant)               │
-                         ▼                              │
-    ┌────────────────────────────────────┐             │
-    │ syntech-article-processor          │◄────────────┘
-    │ (FastAPI)                          │
+                               │
+    ┌────────────────────────────────────┐
+    │ syntech-biofuel-relevance-         │  (News path only)
+    │ classifier (FastAPI)               │
     │                                    │
-    │ - extracts metadata (author, date) │
-    │ - persists to Neon Postgres ◄──────┼─────────────┐
-    │ - posts to Notion (deprecated)     │             │
-    └────────────────────────────────────┘             │
-                                                       │
-                                              (shared database)
-                                                       │
-    ┌──────────────────────────────────────────────────┼───────────┐
-    │ syntech-email-digest ◄───── n8n/API trigger      │           │
-    │ (FastAPI)                                        │           │
-    │                                                  │           │
-    │ - reads articles from Postgres ◄─────────────────┘           │
-    │ - groups by topic, clusters similar articles                 │
-    │ - generates LLM summaries (10 concurrent)                    │
-    │ - sends HTML email via Gmail                                 │
-    │ - batch marks articles as sent                               │
+    │ - determines biofuel relevance     │
+    │ - cascade: fast model + Claude     │
+    │ - returns relevance score/decision │
+    └────────────────────────────────────┘
+
+                              (shared database)
+                                     │
+    ┌────────────────────────────────┼─────────────────────────────┐
+    │ syntech-email-digest ◄───── n8n/API trigger                  │
+    │ (FastAPI)                                                    │
+    │                                                              │
+    │ ┌──────────────────────┐    ┌──────────────────────┐        │
+    │ │ POST /digest/send    │    │ POST /digest/mentions│        │
+    │ │ (News articles)      │    │ /send (Mentions)     │        │
+    │ │ - clusters by topic  │    │ - unsent mentions    │        │
+    │ │ - LLM summaries      │    │ - sentiment badges   │        │
+    │ │ - Gmail delivery     │    │ - Gmail delivery     │        │
+    │ └──────────────────────┘    └──────────────────────┘        │
     │                                                              │
     │ API:                                                         │
-    │ - GET  /digest/pending  → {topic: count}                     │
-    │ - POST /digest/preview  → preview without sending            │
-    │ - POST /digest/send     → trigger digest                     │
-    │   body: {topics?: [...], dry_run?: bool}                     │
+    │ - GET  /digest/pending         → {topic: count}              │
+    │ - POST /digest/preview         → preview without sending     │
+    │ - POST /digest/send            → trigger news digest         │
+    │ - POST /digest/mentions/send   → trigger mentions digest     │
     └──────────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -112,7 +127,8 @@ See `architecture-archive/` for previous versions.
            ┌────────────────────────────────────────────┐
            │  syntech-intelligence-dashboard (Next.js)  │
            │  - reads from same Postgres DB             │
-           │  - shows articles, feedback UI             │
+           │  - shows articles + mentions               │
+           │  - feedback UI for both                    │
            └────────────────────────────────────────────┘
 ```
 
@@ -122,10 +138,10 @@ See `architecture-archive/` for previous versions.
 |------------|------|---------|----------|
 | `syntech-n8n-as-code` | Workflow orchestration | n8n Cloud | — |
 | `syntech-content-sourcing` | URL discovery + extraction | Railway | Own Postgres (url_work_queue) |
-| `syntech-biofuel-relevance-classifier` | Relevance classification | Railway | — |
-| `syntech-article-processor` | Metadata + persistence | Railway | **Neon Postgres (articles)** |
-| `syntech-email-digest` | Email digest delivery | Railway | **Shares article-processor DB** |
-| `syntech-intelligence-dashboard` | Web UI | Vercel | **Shares article-processor DB** |
+| `syntech-biofuel-relevance-classifier` | Relevance classification (News only) | Railway | — |
+| `syntech-article-processor` | News processing + Mentions sentiment | Railway | **Neon Postgres (articles, mentions)** |
+| `syntech-email-digest` | News + Mentions digest delivery | Railway | **Shares article-processor DB** |
+| `syntech-intelligence-dashboard` | Web UI (articles + mentions) | Vercel | **Shares article-processor DB** |
 
 ## Local Paths
 
@@ -152,19 +168,61 @@ class ArticleResponse:
     published_at: datetime | None
 ```
 
+### Mentions API (syntech-article-processor)
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/mentions/analyze` | POST | Bearer | Sentiment analysis + persistence |
+
+**Request body:**
+```json
+{
+  "url": "https://example.com/article",
+  "title": "Article Title",
+  "source": "LinkedIn",
+  "summary": "Brief summary",
+  "content": "Full article content",
+  "publication_date": "2026-05-06T10:00:00Z"  // optional, ISO format
+}
+```
+
+**Response:**
+```json
+{
+  "id": 123,
+  "sentiment_score": 4,        // 0-5 scale
+  "sentiment_label": "positive", // negative | neutral | positive
+  "reason": "Article praises Syntech's expansion plans"
+}
+```
+
+**Notes:**
+- Sentiment scored using GPT-4o-mini (0-5 scale, mapped to labels)
+- Persists to `mentions` + `mention_enrichments` tables
+- Idempotent: existing mentions return cached sentiment (use `?force=true` to re-analyze)
+
 ### Email Digest API (syntech-email-digest)
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/digest/pending` | GET | No | Check unsent article counts per topic |
 | `/digest/preview` | POST | Optional | Preview digest without sending |
-| `/digest/send` | POST | Optional | Trigger digest send |
+| `/digest/send` | POST | Optional | Trigger news digest send |
+| `/digest/mentions/send` | POST | Optional | Trigger mentions digest send |
 
 **Request body** (for `/digest/send` and `/digest/preview`):
 ```json
 {
   "topics": ["Biodiesel", "SAF"],  // optional: filter to topics
   "dry_run": true                   // optional: generate summaries without sending
+}
+```
+
+**Request body** (for `/digest/mentions/send`):
+```json
+{
+  "sender_name": "Custom Sender",  // optional: override default sender
+  "dry_run": true                   // optional: preview without sending
 }
 ```
 
