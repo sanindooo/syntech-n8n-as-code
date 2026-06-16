@@ -116,6 +116,8 @@ See `architecture-archive/` for previous versions.
     │ - GET  /digest/pending         → {topic: count}              │
     │ - POST /digest/preview         → preview without sending     │
     │ - POST /digest/send            → trigger news digest         │
+    │ - POST /digest/test-send       → smoke-test today's render   │
+    │ - POST /digest/replay          → resend a missed digest      │
     │ - POST /digest/mentions/send   → trigger mentions digest     │
     └──────────────────────────────────────────────────────────────┘
                          │
@@ -206,9 +208,11 @@ class ArticleResponse:
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/digest/pending` | GET | No | Check unsent article counts per topic |
-| `/digest/preview` | POST | Optional | Preview digest without sending |
-| `/digest/send` | POST | Optional | Trigger news digest send |
-| `/digest/mentions/send` | POST | Optional | Trigger mentions digest send |
+| `/digest/preview` | POST | Required | Preview digest without sending |
+| `/digest/send` | POST | Required | Trigger the daily news digest (cron entrypoint) |
+| `/digest/test-send` | POST | Required | Render today's digest to a hardcoded test recipient; never marks articles sent |
+| `/digest/replay` | POST | Required | Resend a missed digest to one recipient for a past date (recovery) |
+| `/digest/mentions/send` | POST | Required | Trigger mentions digest send |
 
 **Request body** (for `/digest/send` and `/digest/preview`):
 ```json
@@ -226,7 +230,22 @@ class ArticleResponse:
 }
 ```
 
-**Authentication:** If `WEBHOOK_SECRET` env var is set, requires `X-API-Key` header.
+**Request body** (for `/digest/replay`):
+```json
+{
+  "recipient": "user@example.com",
+  "target_date": "2026-06-14"
+}
+```
+
+**`/digest/test-send` contract:** No request body. The recipient is hardcoded at module level in `syntech-email-digest/app/main.py` (`TEST_DIGEST_RECIPIENT`) so a leaked `WEBHOOK_SECRET` cannot redirect the send to an arbitrary inbox — this was the failure mode of the reverted `/test/send-email` endpoint (commits `6bd9ed0`, `a99de72`). Concurrent calls return `409 Conflict` (serialised by an `asyncio.Lock`). The pipeline times out at 60s (`504 Gateway Timeout`). Never calls `mark_articles_sent`, so the production morning cron still fires normally.
+
+**Response shape (all endpoints):**
+- Success: `DigestResponse` — `{status:"ok", topics_sent, stories_sent, articles_marked, topic_results, reason, error, dry_run, test_mode}`.
+- Error (HTTP 500): `detail = {status:"error", message:"<human>", error:"<enum>"}`. Same shape across `/digest/send`, `/digest/test-send`, `/digest/replay`, and `/digest/mentions/send`.
+- Error enums: `email_auth_expired` (Gmail OAuth needs reauthorising); `all_topics_failed` (articles were queued but every topic failed to deliver to any recipient — most likely a Gmail outage and n8n should alarm); replay-specific codes documented in the email-digest repo.
+
+**Authentication:** `WEBHOOK_SECRET` is **required**. Every protected endpoint refuses with HTTP 503 if the env var is unset — the service will not fail open.
 
 ### Key Invariants (Cross-Service)
 
