@@ -1131,7 +1131,7 @@
             {
               "id": "yield",
               "name": "yield",
-              "value": "={{ Number($(\"Daily — POST /research-ingest\").item.json.queued || 0) / Math.max(1, Number($(\"Daily — Capture Lens Context\").item.json.cap || 25)) }}",
+              "value": "={{ Number(($(\"Daily — Build Ingest Payload\").item.json.urlsEmitted || 0) > 0 ? ($(\"Daily — POST /research-ingest\").item.json.queued || 0) : 0) / Math.max(1, Number($(\"Daily — Capture Lens Context\").item.json.cap || 25)) }}",
               "type": "number"
             }
           ]
@@ -1191,6 +1191,105 @@
       ],
       "id": "6e5ddb6b-5aec-4d40-b500-0eda003a77e0",
       "name": "Weekly — Limit (Testing)"
+    },
+    {
+      "id": "daily-has-urls",
+      "name": "Daily — Has URLs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2256,
+        416
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "daily-has-urls-cond",
+              "leftValue": "={{ $json.urlsEmitted }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fallback-has-urls",
+      "name": "Fallback — Has URLs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3808,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fallback-has-urls-cond",
+              "leftValue": "={{ $json.urlsEmitted }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "weekly-has-urls",
+      "name": "Weekly — Has URLs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2032,
+        1328
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "weekly-has-urls-cond",
+              "leftValue": "={{ $json.urlsEmitted }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
     }
   ],
   "connections": {
@@ -1249,7 +1348,7 @@
       "main": [
         [
           {
-            "node": "Daily — POST /research-ingest",
+            "node": "Daily — Has URLs?",
             "type": "main",
             "index": 0
           }
@@ -1332,7 +1431,7 @@
       "main": [
         [
           {
-            "node": "Fallback — POST /research-ingest",
+            "node": "Fallback — Has URLs?",
             "type": "main",
             "index": 0
           }
@@ -1495,7 +1594,7 @@
       "main": [
         [
           {
-            "node": "Weekly — POST /research-ingest",
+            "node": "Weekly — Has URLs?",
             "type": "main",
             "index": 0
           }
@@ -1710,6 +1809,60 @@
       "main": [
         []
       ]
+    },
+    "Daily — Has URLs?": {
+      "main": [
+        [
+          {
+            "node": "Daily — POST /research-ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Daily — POST Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback — Has URLs?": {
+      "main": [
+        [
+          {
+            "node": "Fallback — POST /research-ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback — POST Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly — Has URLs?": {
+      "main": [
+        [
+          {
+            "node": "Weekly — POST /research-ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Weekly — POST Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1725,7 +1878,7 @@
       "recurrenceRules": []
     }
   },
-  "versionCounter": 85,
+  "versionCounter": 86,
   "tags": [
     {
       "updatedAt": "2026-02-04T09:42:46.339Z",
