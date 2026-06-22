@@ -3,15 +3,149 @@
   "description": null,
   "nodes": [
     {
+      "parameters": {},
       "id": "manual-trigger",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        220,
+        224,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Argus /api/news listing returns { items: [...] } where each item has:\n//   - id: integer (e.g. 2842278) — the canonical article id\n//   - datePublished: ISO timestamp (→ source_date)\n//   - headline / summary / etc.\n//\n// The `links` array in listing items only contains the API endpoint\n// (api.argusmedia.com/articles/<id>) — NOT the public page. Construct\n// the public URL from `id` instead:\n//   https://direct.argusmedia.com/newsandanalysis/article/<id>\n// (Confirmed by inline <a> hrefs inside article bodies.)\n//\n// Heads-up for the smoke run: direct.argusmedia.com is the Argus Direct\n// subscriber portal. content-sourcing may hit a paywall when extracting.\n// If so, articles still flow through dedup + persistence, but with empty\n// body. Track via dashboard.\nconst items = $input.all();\nconst HOST_ALLOWLIST = /^https:\\/\\/(www\\.|direct\\.)?argusmedia\\.com(\\/|$)/;\nconst out = [];\nconst seen = new Set();\nlet droppedNoId = 0, droppedNoDate = 0, droppedBadHost = 0, droppedDup = 0;\nfor (const wrap of items) {\n  const news = wrap.json || {};\n  const list = Array.isArray(news.items) ? news.items : [];\n  for (const it of list) {\n    const id = it.id;\n    if (id === undefined || id === null || id === '') { droppedNoId++; continue; }\n    const url = `https://direct.argusmedia.com/newsandanalysis/article/${id}`;\n    if (!HOST_ALLOWLIST.test(url)) { droppedBadHost++; continue; }\n    if (!it.datePublished) { droppedNoDate++; continue; }\n    if (seen.has(url)) { droppedDup++; continue; }\n    seen.add(url);\n    out.push({ url, source_date: String(it.datePublished) });\n  }\n}\nreturn [{ json: { urls: out, urlsEmitted: out.length, droppedNoId, droppedNoDate, droppedBadHost, droppedDup } }];"
+      },
+      "id": "extract-urls",
+      "name": "Code: Extract URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Shape into the /research-ingest contract. urls already carries\n// {url, source_date} from the extractor.\nconst urls = $input.first().json.urls || [];\nif (!urls.length) {\n  throw new Error('no_urls_extracted — upstream Argus call returned 0 publishable items');\n}\nif (urls.length > 100) urls.length = 100; // cap to /research-ingest max_length\nreturn [{\n  json: {\n    source_type: 'Website',\n    source_name: 'Argus Media',\n    source_category: 'News',\n    urls,\n  },\n}];"
+      },
+      "id": "build-payload",
+      "name": "Code: Build /research-ingest Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://syntech-content-sourcing-production.up.railway.app/research-ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Request-Id",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "post-ingest",
+      "name": "HTTP: POST /research-ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1184,
         320
       ],
-      "parameters": {}
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "e0bBYiHsQNeVlYmn",
+          "name": "Syntech Content Sourcing Bearer"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: {\n  status: r.status || 'queued',\n  queued: r.queued ?? 0,\n  skipped_dedup: r.skipped_dedup ?? 0,\n  source_name: 'Argus Media',\n}}];"
+      },
+      "id": "success-log",
+      "name": "Code: Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        224
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "success-done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst status = r.statusCode || r.status || 502;\nreturn [{ json: {\n  status: 'error',\n  upstream_status: status,\n  error: typeof r.error === 'string' ? r.error : (r.message || 'upstream_failed'),\n  source_name: 'Argus Media',\n}}];"
+      },
+      "id": "error-log",
+      "name": "Code: Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        432
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "error-done",
+      "name": "Done (Error)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Custom Site — Argus Media\n\nFirst instance of the **Custom Site — <Label>** naming convention.\n\n**Pipeline:**\n1. Manual Trigger\n2. HTTP Request → `https://www.argusmedia.com/api/news` (Argus public news feed)\n3. Code: Extract URLs → loop items, take `links[1].href` (public www URL) + `datePublished` as `source_date`. Host allow-list = `argusmedia.com`. Dedup-within-batch.\n4. Code: Build /research-ingest Payload → `{source_type:\"Website\", source_name:\"Argus Media\", source_category:\"News\", urls:[{url, source_date}, ...]}`\n5. HTTP POST `/research-ingest` (httpBearerAuth, retry 3x, onError → error branch)\n6. Success / Error logging\n\n**To add a new Custom Site workflow:** duplicate this, swap the HTTP Request URL + the Extract URLs logic, update the host allow-list regex and `source_name`/`source_category` defaults.\n\nPlan: `docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md` (U6).",
+        "height": 280,
+        "width": 560
+      },
+      "id": "sticky-overview",
+      "name": "Sticky: Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        208,
+        80
+      ]
     },
     {
       "parameters": {
@@ -103,149 +237,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        460,
+        464,
         320
       ],
       "id": "295f93f8-a85d-461f-92de-5f763e4b6f6f",
-      "name": "HTTP Request"
-    },
-    {
-      "id": "extract-urls",
-      "name": "Code: Extract URLs",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        700,
-        320
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Argus /api/news returns { items: [...] }. Each item has:\n//   - datePublished: ISO timestamp string (used as source_date)\n//   - links: [{rel:'article', href:<api>}, {rel:..., href:<public www>}]\n// links[1].href is the public www.argusmedia.com URL — that's the dedup\n// key and the page content-sourcing extracts from. links[0] is the API\n// endpoint (api.argusmedia.com) which we ignore.\nconst items = $input.all();\nconst HOST_ALLOWLIST = /^https:\\/\\/(www\\.)?argusmedia\\.com(\\/|$)/;\nconst out = [];\nconst seen = new Set();\nlet droppedNoLink = 0, droppedNoDate = 0, droppedBadHost = 0, droppedDup = 0;\nfor (const wrap of items) {\n  const news = wrap.json || {};\n  const list = Array.isArray(news.items) ? news.items : [];\n  for (const it of list) {\n    const links = Array.isArray(it.links) ? it.links : [];\n    const publicLink = links[1] && typeof links[1].href === 'string' ? links[1].href : null;\n    if (!publicLink) { droppedNoLink++; continue; }\n    if (!publicLink.startsWith('https://')) { droppedBadHost++; continue; }\n    if (!HOST_ALLOWLIST.test(publicLink)) { droppedBadHost++; continue; }\n    if (!it.datePublished) { droppedNoDate++; continue; }\n    if (seen.has(publicLink)) { droppedDup++; continue; }\n    seen.add(publicLink);\n    out.push({ url: publicLink, source_date: String(it.datePublished) });\n  }\n}\nreturn [{ json: { urls: out, urlsEmitted: out.length, droppedNoLink, droppedNoDate, droppedBadHost, droppedDup } }];"
-      }
-    },
-    {
-      "id": "build-payload",
-      "name": "Code: Build /research-ingest Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        940,
-        320
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Shape into the /research-ingest contract. urls already carries\n// {url, source_date} from the extractor.\nconst urls = $input.first().json.urls || [];\nif (!urls.length) {\n  throw new Error('no_urls_extracted — upstream Argus call returned 0 publishable items');\n}\nif (urls.length > 100) urls.length = 100; // cap to /research-ingest max_length\nreturn [{\n  json: {\n    source_type: 'Website',\n    source_name: 'Argus Media',\n    source_category: 'News',\n    urls,\n  },\n}];"
-      }
-    },
-    {
-      "id": "post-ingest",
-      "name": "HTTP: POST /research-ingest",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1180,
-        320
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "https://syntech-content-sourcing-production.up.railway.app/research-ingest",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "X-Request-Id",
-              "value": "={{ $execution.id }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "e0bBYiHsQNeVlYmn",
-          "name": "Syntech Content Sourcing Bearer"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "onError": "continueErrorOutput"
-    },
-    {
-      "id": "success-log",
-      "name": "Code: Log Success",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1420,
-        220
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "const r = $input.first().json;\nreturn [{ json: {\n  status: r.status || 'queued',\n  queued: r.queued ?? 0,\n  skipped_dedup: r.skipped_dedup ?? 0,\n  source_name: 'Argus Media',\n}}];"
-      }
-    },
-    {
-      "id": "success-done",
-      "name": "Done",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1660,
-        220
-      ],
-      "parameters": {}
-    },
-    {
-      "id": "error-log",
-      "name": "Code: Log Error",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1420,
-        420
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "const r = $input.first().json;\nconst status = r.statusCode || r.status || 502;\nreturn [{ json: {\n  status: 'error',\n  upstream_status: status,\n  error: typeof r.error === 'string' ? r.error : (r.message || 'upstream_failed'),\n  source_name: 'Argus Media',\n}}];"
-      }
-    },
-    {
-      "id": "error-done",
-      "name": "Done (Error)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1660,
-        420
-      ],
-      "parameters": {}
-    },
-    {
-      "id": "sticky-overview",
-      "name": "Sticky: Overview",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        200,
-        80
-      ],
-      "parameters": {
-        "content": "## Custom Site — Argus Media\n\nFirst instance of the **Custom Site — <Label>** naming convention.\n\n**Pipeline:**\n1. Manual Trigger\n2. HTTP Request → `https://www.argusmedia.com/api/news` (Argus public news feed)\n3. Code: Extract URLs → loop items, take `links[1].href` (public www URL) + `datePublished` as `source_date`. Host allow-list = `argusmedia.com`. Dedup-within-batch.\n4. Code: Build /research-ingest Payload → `{source_type:\"Website\", source_name:\"Argus Media\", source_category:\"News\", urls:[{url, source_date}, ...]}`\n5. HTTP POST `/research-ingest` (httpBearerAuth, retry 3x, onError → error branch)\n6. Success / Error logging\n\n**To add a new Custom Site workflow:** duplicate this, swap the HTTP Request URL + the Extract URLs logic, update the host allow-list regex and `source_name`/`source_category` defaults.\n\nPlan: `docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md` (U6).",
-        "width": 560,
-        "height": 280
-      }
+      "name": "Get Articles"
     }
   ],
   "connections": {
@@ -253,18 +249,7 @@
       "main": [
         [
           {
-            "node": "HTTP Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "HTTP Request": {
-      "main": [
-        [
-          {
-            "node": "Code: Extract URLs",
+            "node": "Get Articles",
             "type": "main",
             "index": 0
           }
@@ -332,14 +317,28 @@
           }
         ]
       ]
+    },
+    "Get Articles": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
   },
   "staticData": null,
-  "versionCounter": 5,
+  "versionCounter": 9,
   "tags": [
     {
       "updatedAt": "2026-02-04T09:42:46.339Z",
