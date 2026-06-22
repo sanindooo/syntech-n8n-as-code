@@ -3,38 +3,115 @@
   "description": null,
   "nodes": [
     {
-      "id": "webhook-trigger",
-      "name": "Webhook: Argus URLs",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
       "position": [
         220,
         320
       ],
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "custom-site-argus-media",
-        "responseMode": "responseNode",
-        "options": {}
-      }
+      "parameters": {}
     },
     {
-      "id": "validate",
-      "name": "Code: Validate",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "parameters": {
+        "url": "https://www.argusmedia.com/api/news",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filters",
+              "value": "{\"language\":\"en-gb\"}"
+            },
+            {
+              "name": "resultsPerPage",
+              "value": "27"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "sortField",
+              "value": "date"
+            },
+            {
+              "name": "locale",
+              "value": "en"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "*/*"
+            },
+            {
+              "name": "accept-language",
+              "value": "en-GB,en-US;q=0.9,en;q=0.8"
+            },
+            {
+              "name": "cache-control",
+              "value": "no-cache"
+            },
+            {
+              "name": "pragma",
+              "value": "no-cache"
+            },
+            {
+              "name": "priority",
+              "value": "u=1, i"
+            },
+            {
+              "name": "referer",
+              "value": "https://www.argusmedia.com/en/news-and-insights/latest-market-news?filter_language=en-gb"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"macOS\""
+            },
+            {
+              "name": "sec-fetch-dest",
+              "value": "empty"
+            },
+            {
+              "name": "sec-fetch-mode",
+              "value": "cors"
+            },
+            {
+              "name": "sec-fetch-site",
+              "value": "same-origin"
+            },
+            {
+              "name": "user-agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
       "position": [
         460,
         320
       ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Validate incoming Argus payload. Branches:\n//   - urls: non-empty array of https argusmedia.com URLs → continue\n//   - any failure → throw with a clear message (Webhook returns 4xx)\nconst body = $input.first().json.body || $input.first().json;\nconst urls = Array.isArray(body.urls) ? body.urls : null;\nif (!urls || urls.length === 0) {\n  throw new Error('validation_failed: urls must be a non-empty array');\n}\nif (urls.length > 100) {\n  throw new Error('validation_failed: urls cap is 100 per request');\n}\nconst ARGUS_HOST = /^https:\\/\\/(www\\.)?argusmedia\\.com(\\/|$)/;\nconst seen = new Set();\nconst cleaned = [];\nfor (const raw of urls) {\n  if (typeof raw !== 'string') {\n    throw new Error('validation_failed: every url must be a string');\n  }\n  const u = raw.trim();\n  if (!u.startsWith('https://')) {\n    throw new Error('validation_failed: https-only — got ' + u.slice(0, 80));\n  }\n  if (!ARGUS_HOST.test(u)) {\n    throw new Error('validation_failed: host-not-allowed (argusmedia.com only) — got ' + u.slice(0, 80));\n  }\n  if (seen.has(u)) continue;\n  seen.add(u);\n  cleaned.push(u);\n}\nreturn [{ json: { urls: cleaned, count: cleaned.length } }];"
-      }
+      "id": "295f93f8-a85d-461f-92de-5f763e4b6f6f",
+      "name": "HTTP Request"
     },
     {
-      "id": "build-payload",
-      "name": "Code: Build /research-ingest Payload",
+      "id": "extract-urls",
+      "name": "Code: Extract URLs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -43,7 +120,21 @@
       ],
       "parameters": {
         "language": "javaScript",
-        "jsCode": "// Shape into the /research-ingest contract. source_date deliberately\n// omitted — Argus URLs come from an external scraper that doesn't carry\n// per-result dates. Article-processor falls back to its own extraction.\nconst urls = $input.first().json.urls;\nreturn [{\n  json: {\n    source_type: 'Website',\n    source_name: 'Argus Media',\n    source_category: 'News',\n    urls: urls.map(u => ({ url: u })),\n  },\n}];"
+        "jsCode": "// Argus /api/news returns { items: [...] }. Each item has:\n//   - datePublished: ISO timestamp string (used as source_date)\n//   - links: [{rel:'article', href:<api>}, {rel:..., href:<public www>}]\n// links[1].href is the public www.argusmedia.com URL — that's the dedup\n// key and the page content-sourcing extracts from. links[0] is the API\n// endpoint (api.argusmedia.com) which we ignore.\nconst items = $input.all();\nconst HOST_ALLOWLIST = /^https:\\/\\/(www\\.)?argusmedia\\.com(\\/|$)/;\nconst out = [];\nconst seen = new Set();\nlet droppedNoLink = 0, droppedNoDate = 0, droppedBadHost = 0, droppedDup = 0;\nfor (const wrap of items) {\n  const news = wrap.json || {};\n  const list = Array.isArray(news.items) ? news.items : [];\n  for (const it of list) {\n    const links = Array.isArray(it.links) ? it.links : [];\n    const publicLink = links[1] && typeof links[1].href === 'string' ? links[1].href : null;\n    if (!publicLink) { droppedNoLink++; continue; }\n    if (!publicLink.startsWith('https://')) { droppedBadHost++; continue; }\n    if (!HOST_ALLOWLIST.test(publicLink)) { droppedBadHost++; continue; }\n    if (!it.datePublished) { droppedNoDate++; continue; }\n    if (seen.has(publicLink)) { droppedDup++; continue; }\n    seen.add(publicLink);\n    out.push({ url: publicLink, source_date: String(it.datePublished) });\n  }\n}\nreturn [{ json: { urls: out, urlsEmitted: out.length, droppedNoLink, droppedNoDate, droppedBadHost, droppedDup } }];"
+      }
+    },
+    {
+      "id": "build-payload",
+      "name": "Code: Build /research-ingest Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        320
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Shape into the /research-ingest contract. urls already carries\n// {url, source_date} from the extractor.\nconst urls = $input.first().json.urls || [];\nif (!urls.length) {\n  throw new Error('no_urls_extracted — upstream Argus call returned 0 publishable items');\n}\nif (urls.length > 100) urls.length = 100; // cap to /research-ingest max_length\nreturn [{\n  json: {\n    source_type: 'Website',\n    source_name: 'Argus Media',\n    source_category: 'News',\n    urls,\n  },\n}];"
       }
     },
     {
@@ -52,7 +143,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        940,
+        1180,
         320
       ],
       "parameters": {
@@ -77,12 +168,7 @@
           ]
         },
         "options": {
-          "timeout": 60000,
-          "response": {
-            "response": {
-              "responseFormat": "json"
-            }
-          }
+          "timeout": 60000
         }
       },
       "credentials": {
@@ -97,66 +183,54 @@
       "onError": "continueErrorOutput"
     },
     {
-      "id": "respond-success",
-      "name": "Code: Shape Success Response",
+      "id": "success-log",
+      "name": "Code: Log Success",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1180,
-        220
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Pass through content-sourcing's response + echo source_name so the\n// external caller can correlate.\nconst upstream = $input.first().json;\nreturn [{\n  json: {\n    status: upstream.status || 'queued',\n    queued: upstream.queued ?? 0,\n    skipped_dedup: upstream.skipped_dedup ?? 0,\n    source_name: 'Argus Media',\n  },\n}];"
-      }
-    },
-    {
-      "id": "respond-error",
-      "name": "Code: Shape Error Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1180,
-        420
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Upstream /research-ingest failed after retries. Surface upstream status\n// + body so the caller can see whether it was 4xx (their fault) or 5xx.\nconst raw = $input.first().json;\nconst status = raw.statusCode || raw.status || 502;\nreturn [{\n  json: {\n    status: 'error',\n    upstream_status: status,\n    error: typeof raw.error === 'string' ? raw.error : (raw.message || 'upstream_failed'),\n    source_name: 'Argus Media',\n  },\n}];"
-      }
-    },
-    {
-      "id": "webhook-respond-success",
-      "name": "Respond: Success",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
       "position": [
         1420,
         220
       ],
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "responseCode": 200
-        }
+        "language": "javaScript",
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: {\n  status: r.status || 'queued',\n  queued: r.queued ?? 0,\n  skipped_dedup: r.skipped_dedup ?? 0,\n  source_name: 'Argus Media',\n}}];"
       }
     },
     {
-      "id": "webhook-respond-error",
-      "name": "Respond: Error",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "id": "success-done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "error-log",
+      "name": "Code: Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1420,
         420
       ],
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "responseCode": 502
-        }
+        "language": "javaScript",
+        "jsCode": "const r = $input.first().json;\nconst status = r.statusCode || r.status || 502;\nreturn [{ json: {\n  status: 'error',\n  upstream_status: status,\n  error: typeof r.error === 'string' ? r.error : (r.message || 'upstream_failed'),\n  source_name: 'Argus Media',\n}}];"
       }
+    },
+    {
+      "id": "error-done",
+      "name": "Done (Error)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        420
+      ],
+      "parameters": {}
     },
     {
       "id": "sticky-overview",
@@ -168,25 +242,36 @@
         80
       ],
       "parameters": {
-        "content": "## Custom Site — Argus Media\n\nFirst instance of the **Custom Site — <Label>** naming convention.\n\nReceives URLs from an external Argus scraper and posts them to content-sourcing's `/research-ingest` with `source_type: \"Website\"`. Dedup, classification, persistence inherit from the existing pipeline.\n\n**Standard tail (copy-paste for new custom-site workflows):**\n1. Validate (host allow-list, https-only, dedup)\n2. Build /research-ingest payload\n3. POST /research-ingest (httpBearerAuth + retry + onError→error branch)\n4. Respond (success or 502 with upstream status)\n\nWhen N≥3 custom-site workflows exist, extract the tail into an Execute Workflow subworkflow.\n\nPlan: syntech-n8n-as-code docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md (U6).",
-        "width": 480,
-        "height": 220
+        "content": "## Custom Site — Argus Media\n\nFirst instance of the **Custom Site — <Label>** naming convention.\n\n**Pipeline:**\n1. Manual Trigger\n2. HTTP Request → `https://www.argusmedia.com/api/news` (Argus public news feed)\n3. Code: Extract URLs → loop items, take `links[1].href` (public www URL) + `datePublished` as `source_date`. Host allow-list = `argusmedia.com`. Dedup-within-batch.\n4. Code: Build /research-ingest Payload → `{source_type:\"Website\", source_name:\"Argus Media\", source_category:\"News\", urls:[{url, source_date}, ...]}`\n5. HTTP POST `/research-ingest` (httpBearerAuth, retry 3x, onError → error branch)\n6. Success / Error logging\n\n**To add a new Custom Site workflow:** duplicate this, swap the HTTP Request URL + the Extract URLs logic, update the host allow-list regex and `source_name`/`source_category` defaults.\n\nPlan: `docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md` (U6).",
+        "width": 560,
+        "height": 280
       }
     }
   ],
   "connections": {
-    "Webhook: Argus URLs": {
+    "Manual Trigger": {
       "main": [
         [
           {
-            "node": "Code: Validate",
+            "node": "HTTP Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code: Validate": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Extract URLs": {
       "main": [
         [
           {
@@ -212,36 +297,36 @@
       "main": [
         [
           {
-            "node": "Code: Shape Success Response",
+            "node": "Code: Log Success",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Code: Shape Error Response",
+            "node": "Code: Log Error",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code: Shape Success Response": {
+    "Code: Log Success": {
       "main": [
         [
           {
-            "node": "Respond: Success",
+            "node": "Done",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code: Shape Error Response": {
+    "Code: Log Error": {
       "main": [
         [
           {
-            "node": "Respond: Error",
+            "node": "Done (Error)",
             "type": "main",
             "index": 0
           }
@@ -250,10 +335,17 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
   "staticData": null,
-  "versionCounter": 1,
-  "tags": [],
-  "parentFolder": null
+  "versionCounter": 5,
+  "tags": [
+    {
+      "updatedAt": "2026-02-04T09:42:46.339Z",
+      "createdAt": "2026-02-04T09:42:46.339Z",
+      "id": "ftTaThoU1OADDb6u",
+      "name": "NEWS+"
+    }
+  ]
 }
