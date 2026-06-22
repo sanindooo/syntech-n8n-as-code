@@ -15,7 +15,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Argus /api/news listing returns { items: [...] } where each item has:\n//   - id: integer (e.g. 2842278) — the canonical article id\n//   - datePublished: ISO timestamp (→ source_date)\n//   - headline / summary / etc.\n//\n// The `links` array in listing items only contains the API endpoint\n// (api.argusmedia.com/articles/<id>) — NOT the public page. Construct\n// the public URL from `id` instead:\n//   https://direct.argusmedia.com/newsandanalysis/article/<id>\n// (Confirmed by inline <a> hrefs inside article bodies.)\n//\n// Heads-up for the smoke run: direct.argusmedia.com is the Argus Direct\n// subscriber portal. content-sourcing may hit a paywall when extracting.\n// If so, articles still flow through dedup + persistence, but with empty\n// body. Track via dashboard.\nconst items = $input.all();\nconst HOST_ALLOWLIST = /^https:\\/\\/(www\\.|direct\\.)?argusmedia\\.com(\\/|$)/;\nconst out = [];\nconst seen = new Set();\nlet droppedNoId = 0, droppedNoDate = 0, droppedBadHost = 0, droppedDup = 0;\nfor (const wrap of items) {\n  const news = wrap.json || {};\n  const list = Array.isArray(news.items) ? news.items : [];\n  for (const it of list) {\n    const id = it.id;\n    if (id === undefined || id === null || id === '') { droppedNoId++; continue; }\n    const url = `https://direct.argusmedia.com/newsandanalysis/article/${id}`;\n    if (!HOST_ALLOWLIST.test(url)) { droppedBadHost++; continue; }\n    if (!it.datePublished) { droppedNoDate++; continue; }\n    if (seen.has(url)) { droppedDup++; continue; }\n    seen.add(url);\n    out.push({ url, source_date: String(it.datePublished) });\n  }\n}\nreturn [{ json: { urls: out, urlsEmitted: out.length, droppedNoId, droppedNoDate, droppedBadHost, droppedDup } }];"
+        "jsCode": "// Argus /api/news listing items carry { id, headline, datePublished, ... }.\n// Construct the canonical public article URL by slugifying the headline:\n//   https://www.argusmedia.com/en/news-and-insights/latest-market-news/<id>-<slug>\n// Slug rule: lowercase, replace every run of non-alphanumerics with a single\n// hyphen, strip leading/trailing hyphens. Apostrophes, commas, colons all\n// collapse to '-' the same way (verified against Argus's own canonical URLs).\nconst items = $input.all();\nconst HOST_ALLOWLIST = /^https:\\/\\/www\\.argusmedia\\.com\\//;\nfunction slugify(s) {\n  return String(s || '')\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n}\nconst out = [];\nconst seen = new Set();\nlet droppedNoId = 0, droppedNoHeadline = 0, droppedNoDate = 0, droppedBadHost = 0, droppedDup = 0;\nfor (const wrap of items) {\n  const news = wrap.json || {};\n  const list = Array.isArray(news.items) ? news.items : [];\n  for (const it of list) {\n    const id = it.id;\n    if (id === undefined || id === null || id === '') { droppedNoId++; continue; }\n    const slug = slugify(it.headline);\n    if (!slug) { droppedNoHeadline++; continue; }\n    const url = `https://www.argusmedia.com/en/news-and-insights/latest-market-news/${id}-${slug}`;\n    if (!HOST_ALLOWLIST.test(url)) { droppedBadHost++; continue; }\n    if (!it.datePublished) { droppedNoDate++; continue; }\n    if (seen.has(url)) { droppedDup++; continue; }\n    seen.add(url);\n    out.push({ url, source_date: String(it.datePublished) });\n  }\n}\nreturn [{ json: { urls: out, urlsEmitted: out.length, droppedNoId, droppedNoHeadline, droppedNoDate, droppedBadHost, droppedDup } }];"
       },
       "id": "extract-urls",
       "name": "Code: Extract URLs",
@@ -86,7 +86,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nreturn [{ json: {\n  status: r.status || 'queued',\n  queued: r.queued ?? 0,\n  skipped_dedup: r.skipped_dedup ?? 0,\n  source_name: 'Argus Media',\n}}];"
+        "jsCode": "// Pull together the run summary for the success Slack message.\n//   - upstream:  /research-ingest response  (queued, skipped_dedup, status)\n//   - extract:   Code: Extract URLs output  (urlsEmitted, drop counters)\nconst upstream = $input.first().json || {};\nconst extract = $('Code: Extract URLs').first().json || {};\nreturn [{ json: {\n  status: upstream.status || 'queued',\n  urlsEmitted: extract.urlsEmitted ?? 0,\n  queued: upstream.queued ?? 0,\n  skipped_dedup: upstream.skipped_dedup ?? 0,\n  droppedNoId: extract.droppedNoId ?? 0,\n  droppedNoHeadline: extract.droppedNoHeadline ?? 0,\n  droppedNoDate: extract.droppedNoDate ?? 0,\n  droppedBadHost: extract.droppedBadHost ?? 0,\n  droppedDup: extract.droppedDup ?? 0,\n  source_name: 'Argus Media',\n}}];"
       },
       "id": "success-log",
       "name": "Code: Log Success",
@@ -98,19 +98,8 @@
       ]
     },
     {
-      "parameters": {},
-      "id": "success-done",
-      "name": "Done",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1664,
-        224
-      ]
-    },
-    {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst status = r.statusCode || r.status || 502;\nreturn [{ json: {\n  status: 'error',\n  upstream_status: status,\n  error: typeof r.error === 'string' ? r.error : (r.message || 'upstream_failed'),\n  source_name: 'Argus Media',\n}}];"
+        "jsCode": "// Pull together the error context for the error Slack message.\n// Fires once per failed POST /research-ingest (after retries exhausted).\nconst raw = $input.first().json || {};\nconst extract = $('Code: Extract URLs').first().json || {};\nconst status = raw.statusCode || raw.status || 502;\nconst errMsg = typeof raw.error === 'string' ? raw.error\n  : (raw.message || raw.body || JSON.stringify(raw).slice(0, 500));\nreturn [{ json: {\n  status: 'error',\n  upstream_status: status,\n  error: String(errMsg).slice(0, 500),\n  urlsEmitted: extract.urlsEmitted ?? 0,\n  source_name: 'Argus Media',\n}}];"
       },
       "id": "error-log",
       "name": "Code: Log Error",
@@ -122,21 +111,10 @@
       ]
     },
     {
-      "parameters": {},
-      "id": "error-done",
-      "name": "Done (Error)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1664,
-        432
-      ]
-    },
-    {
       "parameters": {
         "content": "## Custom Site — Argus Media\n\nFirst instance of the **Custom Site — <Label>** naming convention.\n\n**Pipeline:**\n1. Manual Trigger\n2. HTTP Request → `https://www.argusmedia.com/api/news` (Argus public news feed)\n3. Code: Extract URLs → loop items, take `links[1].href` (public www URL) + `datePublished` as `source_date`. Host allow-list = `argusmedia.com`. Dedup-within-batch.\n4. Code: Build /research-ingest Payload → `{source_type:\"Website\", source_name:\"Argus Media\", source_category:\"News\", urls:[{url, source_date}, ...]}`\n5. HTTP POST `/research-ingest` (httpBearerAuth, retry 3x, onError → error branch)\n6. Success / Error logging\n\n**To add a new Custom Site workflow:** duplicate this, swap the HTTP Request URL + the Extract URLs logic, update the host allow-list regex and `source_name`/`source_category` defaults.\n\nPlan: `docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md` (U6).",
-        "height": 280,
-        "width": 560
+        "height": 696,
+        "width": 848
       },
       "id": "sticky-overview",
       "name": "Sticky: Overview",
@@ -144,7 +122,7 @@
       "typeVersion": 1,
       "position": [
         208,
-        80
+        -128
       ]
     },
     {
@@ -242,6 +220,60 @@
       ],
       "id": "295f93f8-a85d-461f-92de-5f763e4b6f6f",
       "name": "Get Articles"
+    },
+    {
+      "id": "slack-success",
+      "name": "Slack: Notify Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1660,
+        220
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09V1831FN2",
+          "mode": "list",
+          "cachedResultName": "syntech-n8n-error-tracker"
+        },
+        "text": "=:white_check_mark: *Custom Site — Argus Media* — run complete\n• Submitted: {{ $json.urlsEmitted }} URLs\n• Queued: {{ $json.queued }}\n• Skipped (dedup): {{ $json.skipped_dedup }}\n• Dropped at extract: noId={{ $json.droppedNoId }} noHeadline={{ $json.droppedNoHeadline }} noDate={{ $json.droppedNoDate }} badHost={{ $json.droppedBadHost }} dup={{ $json.droppedDup }}\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "hndVCHiq0HgMBAh3",
+          "name": "Stephen Slack account"
+        }
+      }
+    },
+    {
+      "id": "slack-error",
+      "name": "Slack: Notify Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1660,
+        420
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09V1831FN2",
+          "mode": "list",
+          "cachedResultName": "syntech-n8n-error-tracker"
+        },
+        "text": "=:rotating_light: *Custom Site — Argus Media* — POST /research-ingest failed\n• Upstream status: {{ $json.upstream_status }}\n• URLs in batch: {{ $json.urlsEmitted }}\n• Error: {{ $json.error }}\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "hndVCHiq0HgMBAh3",
+          "name": "Stephen Slack account"
+        }
+      }
     }
   ],
   "connections": {
@@ -300,7 +332,7 @@
       "main": [
         [
           {
-            "node": "Done",
+            "node": "Slack: Notify Success",
             "type": "main",
             "index": 0
           }
@@ -311,7 +343,7 @@
       "main": [
         [
           {
-            "node": "Done (Error)",
+            "node": "Slack: Notify Error",
             "type": "main",
             "index": 0
           }
@@ -338,7 +370,7 @@
     "availableInMCP": true
   },
   "staticData": null,
-  "versionCounter": 9,
+  "versionCounter": 14,
   "tags": [
     {
       "updatedAt": "2026-02-04T09:42:46.339Z",
