@@ -70,17 +70,8 @@ See `architecture-archive/` for previous versions.
     │    └─────────┬──────────┘    └─────────┬──────────┘         │
     │              │                          │                    │
     │              ▼                          ▼                    │
-    │    ┌──────────────────────────────────────────────────┐     │
-    │    │ syntech-semantic-article-deduplication (Flask)   │     │
-    │    │ - clusters near-duplicate articles               │     │
-    │    │ - selects best representative per cluster        │     │
-    │    │ - reduces volume before classification/analysis  │     │
-    │    │ (called on BOTH News and Mention paths)          │     │
-    │    └─────────┬──────────────────────┬────────────────┘     │
-    │              │                      │                       │
-    │              ▼                      ▼                       │
-    │    POST /mentions/analyze   POST /classify → /process      │
-    └──────────────┬───────────────────────────┬─────────────────┘
+    │    POST /mentions/analyze      POST /classify → /process    │
+    └──────────────┬───────────────────────────┬───────────────────┘
                    │                           │
                    │                           │
                    ▼                           ▼
@@ -125,8 +116,6 @@ See `architecture-archive/` for previous versions.
     │ - GET  /digest/pending         → {topic: count}              │
     │ - POST /digest/preview         → preview without sending     │
     │ - POST /digest/send            → trigger news digest         │
-    │ - POST /digest/test-send       → smoke-test today's render   │
-    │ - POST /digest/replay          → resend a missed digest      │
     │ - POST /digest/mentions/send   → trigger mentions digest     │
     └──────────────────────────────────────────────────────────────┘
                          │
@@ -147,9 +136,8 @@ See `architecture-archive/` for previous versions.
 
 | Repository | Role | Runtime | Database |
 |------------|------|---------|----------|
-| `syntech-n8n-as-code` | Workflow orchestration | Self-hosted n8n on Railway | — |
+| `syntech-n8n-as-code` | Workflow orchestration | n8n Cloud | — |
 | `syntech-content-sourcing` | URL discovery + extraction | Railway | Own Postgres (url_work_queue) |
-| `syntech-semantic-article-deduplication` | Near-duplicate clustering (News + Mentions) | Railway | — |
 | `syntech-biofuel-relevance-classifier` | Relevance classification (News only) | Railway | — |
 | `syntech-article-processor` | News processing + Mentions sentiment | Railway | **Neon Postgres (articles, mentions)** |
 | `syntech-email-digest` | News + Mentions digest delivery | Railway | **Shares article-processor DB** |
@@ -160,7 +148,6 @@ See `architecture-archive/` for previous versions.
 All repositories live under `/Users/sanindo/`:
 - `syntech-n8n-as-code`
 - `syntech-content-sourcing`
-- `syntech-semantic-article-deduplication`
 - `syntech-biofuel-relevance-classifier`
 - `syntech-article-processor`
 - `syntech-email-digest`
@@ -175,61 +162,11 @@ class ArticleResponse:
     url: str                    # canonical URL (after redirect resolution)
     title: str                  # article title
     content: str                # extracted text content
-    source: str                 # platform: "LinkedIn" | "RSS" | "Google" | "Website" | "Keyword" | "AISearch"
+    source: str                 # platform: "LinkedIn" | "RSS" | "Google" | "Website" | "Keyword" | ...
     source_category: str        # user-defined category from source config
     author: str | None          # author name (separate from source)
-    publication_date: str | None  # ISO-8601; HTML-extracted OR seed-supplied (whichever was found first)
-    source_date: str | None     # AI-supplied publication date carried through from /research-ingest;
-                                # downstream uses as a defensive secondary fallback when
-                                # publication_date is missing/unparseable
+    published_at: datetime | None
 ```
-
-### Content Sourcing API (syntech-content-sourcing)
-
-| Endpoint | Method | Auth | Purpose |
-|----------|--------|------|---------|
-| `/search` | POST | Bearer | Per-source URL discovery (handler-driven) — RSS, LinkedIn, Apify, etc. |
-| `/research-ingest` | POST | Bearer | Pre-discovered batch intake (AI Research + Custom Site workflows) |
-| `/healthz` | GET | — | Liveness |
-| `/readyz` | GET | — | Readiness + dependency checks |
-| `/admin/queue/status` | GET | Admin | url_work_queue health, state counts |
-
-**`/research-ingest` request body:**
-
-```json
-{
-  "source_type": "AISearch" | "Website",
-  "source_name": "ai-research-biofuel" | "Argus Media" | ...,
-  "source_category": "News" | "Customer" | ...,
-  "urls": [
-    { "url": "https://example.com/article", "source_date": "2026-06-22T10:00:00Z" },
-    { "url": "https://example.com/another" }
-  ],
-  "test_mode": false
-}
-```
-
-Notes:
-- `urls` is a **list of objects** `{url, source_date?}`. Bare-string URLs are rejected (422). Min 1, max 100 items.
-- `source_date` is optional ISO-8601 per URL. When set, plumbed into `request_context.seeds.publication_date` on the `url_work_queue` row and used as a fallback if HTML extraction yields no `publication_date`.
-- `source_type` is the strict-literal `{"AISearch", "Website"}`. Adding a value requires a coordinated downstream rollout (see `docs/plans/2026-06-22-001-feat-source-date-and-custom-site-intake-plan.md`); a unit-test drift pin in `tests/test_research_ingest.py` fails CI if the membership changes without intent.
-- URL safety enforced at the Pydantic boundary: https-only, RFC 1918 block, link-local block, blocked metadata hostnames (see `_url_passes_safety_check`).
-
-### Custom Site — &lt;Label&gt; n8n workflow pattern
-
-For client-specific scraping needs (one external site, recurring ingest), use the `Custom Site — <Label>` convention rather than a bespoke workflow. First instance: `Custom Site — Argus Media` (`fPEl9NsH2gZmXbxN`).
-
-**Standard shape (5 functional nodes + IF + Zyte fallback):**
-
-1. **Trigger** — Manual or Schedule.
-2. **Get Articles** — direct HTTP Request to the site's listing/feed endpoint.
-3. **IF: `hitCount > 0`** — empty-result detection (sites rate-limit; the empty case is normal). FALSE → Slack `🟡 rate-limit hit` → Zyte fallback (`https://api.zyte.com/v1/extract` via Basic Auth, residential proxy) → decode → rejoin pipeline. TRUE → direct path.
-4. **Code: Extract URLs** — site-specific: construct canonical URL from listing item fields (e.g. Argus: `https://www.argusmedia.com/en/news-and-insights/latest-market-news/<id>-<slugified-headline>`), capture `source_date` from listing's published timestamp, host allow-list, dedup-within-batch.
-5. **Code: Build /research-ingest Payload** — `{source_type: "Website", source_name, source_category, urls: [{url, source_date}, ...]}`.
-6. **HTTP POST `/research-ingest`** — `httpBearerAuth` credential, `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 5000`, `onError: continueErrorOutput`.
-7. **Slack: Notify Success / Error** — terminal Slack nodes on each branch. Success node uses `executeOnce: true` (one summary per run); error fires per failed batch.
-
-Naming: em-dash display name (`Custom Site — Foo`), hyphen filename for filesystem portability. See `feedback_custom_site_zyte_default` memory and `workflows/snapshots/Custom-Site-Argus-Media.workflow.json` for the reference implementation.
 
 ### Mentions API (syntech-article-processor)
 
@@ -245,10 +182,7 @@ Naming: em-dash display name (`Custom Site — Foo`), hyphen filename for filesy
   "source": "LinkedIn",
   "summary": "Brief summary",
   "content": "Full article content",
-  "publication_date": "2026-05-06T10:00:00Z",  // optional, ISO format
-  "source_date": "2026-05-06T10:00:00Z"        // optional, ISO format —
-                                                // AI-supplied fallback when
-                                                // publication_date is missing
+  "publication_date": "2026-05-06T10:00:00Z"  // optional, ISO format
 }
 ```
 
@@ -272,11 +206,9 @@ Naming: em-dash display name (`Custom Site — Foo`), hyphen filename for filesy
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/digest/pending` | GET | No | Check unsent article counts per topic |
-| `/digest/preview` | POST | Required | Preview digest without sending |
-| `/digest/send` | POST | Required | Trigger the daily news digest (cron entrypoint) |
-| `/digest/test-send` | POST | Required | Render today's digest to a hardcoded test recipient; never marks articles sent |
-| `/digest/replay` | POST | Required | Resend a missed digest to one recipient for a past date (recovery) |
-| `/digest/mentions/send` | POST | Required | Trigger mentions digest send |
+| `/digest/preview` | POST | Optional | Preview digest without sending |
+| `/digest/send` | POST | Optional | Trigger news digest send |
+| `/digest/mentions/send` | POST | Optional | Trigger mentions digest send |
 
 **Request body** (for `/digest/send` and `/digest/preview`):
 ```json
@@ -294,22 +226,7 @@ Naming: em-dash display name (`Custom Site — Foo`), hyphen filename for filesy
 }
 ```
 
-**Request body** (for `/digest/replay`):
-```json
-{
-  "recipient": "user@example.com",
-  "target_date": "2026-06-14"
-}
-```
-
-**`/digest/test-send` contract:** No request body. The recipient is hardcoded at module level in `syntech-email-digest/app/main.py` (`TEST_DIGEST_RECIPIENT`) so a leaked `WEBHOOK_SECRET` cannot redirect the send to an arbitrary inbox — this was the failure mode of the reverted `/test/send-email` endpoint (commits `6bd9ed0`, `a99de72`). Concurrent calls return `409 Conflict` (serialised by an `asyncio.Lock`). The pipeline times out at 60s (`504 Gateway Timeout`). Never calls `mark_articles_sent`, so the production morning cron still fires normally.
-
-**Response shape (all endpoints):**
-- Success: `DigestResponse` — `{status:"ok", topics_sent, stories_sent, articles_marked, topic_results, reason, error, dry_run, test_mode}`.
-- Error (HTTP 500): `detail = {status:"error", message:"<human>", error:"<enum>"}`. Same shape across `/digest/send`, `/digest/test-send`, `/digest/replay`, and `/digest/mentions/send`.
-- Error enums: `email_auth_expired` (Gmail OAuth needs reauthorising); `all_topics_failed` (articles were queued but every topic failed to deliver to any recipient — most likely a Gmail outage and n8n should alarm); replay-specific codes documented in the email-digest repo.
-
-**Authentication:** `WEBHOOK_SECRET` is **required**. Every protected endpoint refuses with HTTP 503 if the env var is unset — the service will not fail open.
+**Authentication:** If `WEBHOOK_SECRET` env var is set, requires `X-API-Key` header.
 
 ### Key Invariants (Cross-Service)
 
@@ -322,10 +239,6 @@ Naming: em-dash display name (`Custom Site — Foo`), hyphen filename for filesy
 4. **Bearer auth pattern** — use `httpBearerAuth` in n8n, not `httpHeaderAuth`.
 
 5. **Output fields are schema** — changing handler output fields requires approval.
-
-6. **Pydantic `extra="forbid"` is per-service, not pipeline-wide** — only `syntech-biofuel-relevance-classifier` is strict (its `ClassifyRequest` rejects unknown fields with 422). `syntech-content-sourcing`, `syntech-article-processor`, and the rest default to `extra="ignore"` and silently absorb new fields. **Implication for cross-repo rollouts:** the classifier is the strict-gate deploy. Add new fields to its schema FIRST, then everything downstream.
-
-7. **`source_date` is a defensive fallback, not the primary date** — AI-supplied publication date carried from `/research-ingest → request_context.seeds.publication_date → ArticleResponse.source_date`. Downstream precedence is always `publication_date` (HTML-extracted truth) > `source_date` (AI seed). Never use `source_date` as the canonical date when `publication_date` is present.
 
 ## Cross-Repo Debugging
 

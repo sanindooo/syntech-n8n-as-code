@@ -1,5 +1,15 @@
 # Agent Instructions
 
+## Client & Pipeline Context
+This repo is part of the Syntech biofuel intelligence pipeline (client: Syntech, managed by Granite Marketing).
+- For full pipeline architecture, data flow, cross-repo impact rules, and shared contracts:
+  READ ~/granite/clients/syntech/architecture.md
+- For client context, stakeholders, and project status:
+  READ ~/granite/clients/syntech/CLAUDE.md
+- For approved tech stack and libraries (don't build bespoke):
+  READ ~/granite/knowledge/tech-conventions.md
+Always read these before brainstorming, planning, or making changes that affect other services in the pipeline.
+
 > This file is mirrored across CLAUDE.md, AGENTS.md, and GEMINI.md so the same instructions load in any AI environment.
 
 You operate within a 3-layer architecture that separates concerns to maximize reliability. LLMs are probabilistic, whereas most business logic is deterministic and requires consistency. This system fixes that mismatch.
