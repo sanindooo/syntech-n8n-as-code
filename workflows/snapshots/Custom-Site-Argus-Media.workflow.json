@@ -22,7 +22,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        704,
+        1184,
         320
       ]
     },
@@ -35,7 +35,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        944,
+        1424,
         320
       ]
     },
@@ -70,7 +70,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1184,
+        1664,
         320
       ],
       "retryOnFail": true,
@@ -93,7 +93,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1424,
+        1904,
         224
       ]
     },
@@ -106,7 +106,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1424,
+        1904,
         432
       ]
     },
@@ -222,14 +222,6 @@
       "name": "Get Articles"
     },
     {
-      "id": "slack-success",
-      "name": "Slack: Notify Success",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.3,
-      "position": [
-        1660,
-        220
-      ],
       "parameters": {
         "select": "channel",
         "channelId": {
@@ -241,6 +233,15 @@
         "text": "=:white_check_mark: *Custom Site — Argus Media* — run complete\n• Submitted: {{ $json.urlsEmitted }} URLs\n• Queued: {{ $json.queued }}\n• Skipped (dedup): {{ $json.skipped_dedup }}\n• Dropped at extract: noId={{ $json.droppedNoId }} noHeadline={{ $json.droppedNoHeadline }} noDate={{ $json.droppedNoDate }} badHost={{ $json.droppedBadHost }} dup={{ $json.droppedDup }}\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
         "otherOptions": {}
       },
+      "id": "slack-success",
+      "name": "Slack: Notify Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2144,
+        224
+      ],
+      "executeOnce": true,
       "credentials": {
         "slackApi": {
           "id": "hndVCHiq0HgMBAh3",
@@ -249,14 +250,6 @@
       }
     },
     {
-      "id": "slack-error",
-      "name": "Slack: Notify Error",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.3,
-      "position": [
-        1660,
-        420
-      ],
       "parameters": {
         "select": "channel",
         "channelId": {
@@ -268,11 +261,122 @@
         "text": "=:rotating_light: *Custom Site — Argus Media* — POST /research-ingest failed\n• Upstream status: {{ $json.upstream_status }}\n• URLs in batch: {{ $json.urlsEmitted }}\n• Error: {{ $json.error }}\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
         "otherOptions": {}
       },
+      "id": "slack-error",
+      "name": "Slack: Notify Error",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2144,
+        432
+      ],
       "credentials": {
         "slackApi": {
           "id": "hndVCHiq0HgMBAh3",
           "name": "Stephen Slack account"
         }
+      }
+    },
+    {
+      "id": "if-has-articles",
+      "name": "IF: Has Articles",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hitcount-gt-zero",
+              "leftValue": "={{ $json.hitCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "slack-rate-limit",
+      "name": "Slack: Notify Rate-Limit",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        940,
+        480
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09V1831FN2",
+          "mode": "list",
+          "cachedResultName": "syntech-n8n-error-tracker"
+        },
+        "text": "=:large_yellow_circle: *Custom Site — Argus Media* — rate-limit hit, falling back to Zyte\n• Direct call returned 0 items\n• Routing through Zyte residential proxy (geolocation GB)\n• Workflow continues — this is not a failure\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "hndVCHiq0HgMBAh3",
+          "name": "Stephen Slack account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "get-articles-zyte",
+      "name": "Get Articles (via Zyte)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1180,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zyte.com/v1/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: \"https://www.argusmedia.com/api/news?filters=%7B%22language%22%3A%22en-gb%22%7D&resultsPerPage=27&page=1&sortField=date&locale=en\", httpResponseBody: true, geolocation: 'GB' }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_ZYTE_CRED_ID",
+          "name": "Zyte API Key"
+        }
+      }
+    },
+    {
+      "id": "decode-zyte",
+      "name": "Code: Decode Zyte Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        480
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Zyte returns { httpResponseBody: <base64>, statusCode, ... }.\n// Decode to UTF-8, parse the JSON, surface in the same shape Argus's\n// direct response uses ({ totalHitCount, hitCount, items, itemsCursor })\n// so the downstream Code: Extract URLs node treats both branches the same.\nconst r = $input.first().json;\nconst b64 = r.httpResponseBody;\nif (!b64) {\n  throw new Error('zyte_empty_response — no httpResponseBody field returned');\n}\nlet parsed;\ntry {\n  parsed = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));\n} catch (e) {\n  throw new Error('zyte_decode_failed: ' + e.message);\n}\nreturn [{ json: parsed }];"
       }
     }
   ],
@@ -354,6 +458,57 @@
       "main": [
         [
           {
+            "node": "IF: Has Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Articles": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract URLs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: Notify Rate-Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Notify Rate-Limit": {
+      "main": [
+        [
+          {
+            "node": "Get Articles (via Zyte)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Articles (via Zyte)": {
+      "main": [
+        [
+          {
+            "node": "Code: Decode Zyte Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Decode Zyte Response": {
+      "main": [
+        [
+          {
             "node": "Code: Extract URLs",
             "type": "main",
             "index": 0
@@ -370,7 +525,7 @@
     "availableInMCP": true
   },
   "staticData": null,
-  "versionCounter": 14,
+  "versionCounter": 16,
   "tags": [
     {
       "updatedAt": "2026-02-04T09:42:46.339Z",
