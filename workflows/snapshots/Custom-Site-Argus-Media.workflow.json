@@ -22,7 +22,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1184,
+        1568,
         320
       ]
     },
@@ -35,7 +35,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1424,
+        1792,
         320
       ]
     },
@@ -70,7 +70,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1664,
+        2016,
         320
       ],
       "retryOnFail": true,
@@ -93,7 +93,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1904,
+        2240,
         224
       ]
     },
@@ -106,8 +106,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1904,
-        432
+        2240,
+        416
       ]
     },
     {
@@ -121,8 +121,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        208,
-        -128
+        80,
+        -208
       ]
     },
     {
@@ -215,7 +215,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        464,
+        448,
         320
       ],
       "id": "295f93f8-a85d-461f-92de-5f763e4b6f6f",
@@ -238,7 +238,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
       "position": [
-        2144,
+        2464,
         224
       ],
       "executeOnce": true,
@@ -266,8 +266,8 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
       "position": [
-        2144,
-        432
+        2464,
+        416
       ],
       "credentials": {
         "slackApi": {
@@ -277,14 +277,6 @@
       }
     },
     {
-      "id": "if-has-articles",
-      "name": "IF: Has Articles",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        700,
-        320
-      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -307,17 +299,17 @@
           "combinator": "and"
         },
         "options": {}
-      }
+      },
+      "id": "if-has-articles",
+      "name": "IF: Has Articles",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        320
+      ]
     },
     {
-      "id": "slack-rate-limit",
-      "name": "Slack: Notify Rate-Limit",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.3,
-      "position": [
-        940,
-        480
-      ],
       "parameters": {
         "select": "channel",
         "channelId": {
@@ -329,23 +321,23 @@
         "text": "=:large_yellow_circle: *Custom Site — Argus Media* — rate-limit hit, falling back to Zyte\n• Direct call returned 0 items\n• Routing through Zyte residential proxy (geolocation GB)\n• Workflow continues — this is not a failure\n• Run: https://syntech-biofuels.granite-automations.app/workflow/{{ $workflow.id }}/executions/{{ $execution.id }}",
         "otherOptions": {}
       },
+      "id": "slack-rate-limit",
+      "name": "Slack: Notify Rate-Limit",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        400
+      ],
+      "executeOnce": true,
       "credentials": {
         "slackApi": {
           "id": "hndVCHiq0HgMBAh3",
           "name": "Stephen Slack account"
         }
-      },
-      "executeOnce": true
+      }
     },
     {
-      "id": "get-articles-zyte",
-      "name": "Get Articles (via Zyte)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1180,
-        480
-      ],
       "parameters": {
         "method": "POST",
         "url": "https://api.zyte.com/v1/extract",
@@ -358,26 +350,33 @@
           "timeout": 60000
         }
       },
+      "id": "get-articles-zyte",
+      "name": "Get Articles (via Zyte)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        400
+      ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "PLACEHOLDER_ZYTE_CRED_ID",
-          "name": "Zyte API Key"
+          "id": "5pdaLTKx0s1UCEZ1",
+          "name": "Stephen Zyte Basic"
         }
       }
     },
     {
+      "parameters": {
+        "jsCode": "// Zyte returns { httpResponseBody: <base64>, statusCode, ... }.\n// Decode to UTF-8, parse the JSON, surface in the same shape Argus's\n// direct response uses ({ totalHitCount, hitCount, items, itemsCursor })\n// so the downstream Code: Extract URLs node treats both branches the same.\nconst r = $input.first().json;\nconst b64 = r.httpResponseBody;\nif (!b64) {\n  throw new Error('zyte_empty_response — no httpResponseBody field returned');\n}\nlet parsed;\ntry {\n  parsed = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));\n} catch (e) {\n  throw new Error('zyte_decode_failed: ' + e.message);\n}\nreturn [{ json: parsed }];"
+      },
       "id": "decode-zyte",
       "name": "Code: Decode Zyte Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1420,
-        480
-      ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "// Zyte returns { httpResponseBody: <base64>, statusCode, ... }.\n// Decode to UTF-8, parse the JSON, surface in the same shape Argus's\n// direct response uses ({ totalHitCount, hitCount, items, itemsCursor })\n// so the downstream Code: Extract URLs node treats both branches the same.\nconst r = $input.first().json;\nconst b64 = r.httpResponseBody;\nif (!b64) {\n  throw new Error('zyte_empty_response — no httpResponseBody field returned');\n}\nlet parsed;\ntry {\n  parsed = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));\n} catch (e) {\n  throw new Error('zyte_decode_failed: ' + e.message);\n}\nreturn [{ json: parsed }];"
-      }
+        1344,
+        400
+      ]
     }
   ],
   "connections": {
@@ -525,7 +524,7 @@
     "availableInMCP": true
   },
   "staticData": null,
-  "versionCounter": 16,
+  "versionCounter": 20,
   "tags": [
     {
       "updatedAt": "2026-02-04T09:42:46.339Z",
