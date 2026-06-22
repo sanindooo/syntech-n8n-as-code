@@ -1,7 +1,8 @@
 ---
 title: "feat: AI source-date passthrough + Custom Site URL intake"
-status: active
+status: completed
 date: 2026-06-22
+completed: 2026-06-22
 type: feat
 depth: deep
 origin: docs/brainstorms/2026-06-22-ai-search-debug-and-custom-url-intake-requirements.md
@@ -11,6 +12,12 @@ repos:
   - syntech-article-processor
   - syntech-biofuel-relevance-classifier
 ---
+
+> **Status: shipped 2026-06-22.** All 7 implementation units landed. Both n8n workflows (AI Research Sourcing, Custom Site — Argus Media) ran end-to-end against the deployed services, articles flowed through `Process Articles` into the dashboard, and the email digest rendered cleanly. Follow-ups tracked in Todoist (Syntech BioFuel → Next Actions):
+> 1. Weekly Anthropic VIP path — unverified; needs dashboard lens-config `vip_anthropic` flag.
+> 2. AI Research lens label prettifier — cosmetic; awaiting feedback on whether `ai-research-<key>` reads as raw in the digest.
+>
+> Smoke notes: 27 Argus URLs → 24 articles flushed → in the digest. 3 AI Research lenses ran with the relative-date parser fix ("N days ago" parsing) and empty-urls IF gate (no false 422 Slack alerts). Zyte rate-limit fallback wired but unfired (Argus's API was responsive every run; will be exercised organically). Per-article `source_date → publication_date` fallback wired through all four services but not yet exercised end-to-end (most Argus pages extracted cleanly).
 
 # feat: AI source-date passthrough + Custom Site URL intake
 
